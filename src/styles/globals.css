@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* ChorusSync Design Tokens */
+@theme {
+  /* Divine Dark Mode palette */
+  --color-divine-bg: #020617;
+  --color-divine-surface: #0f172a;
+  --color-divine-card: #1e293b;
+  --color-divine-border: #334155;
+  --color-divine-accent: #ea580c;
+  --color-divine-accent-light: #fb923c;
+  --color-divine-accent-glow: rgba(234, 88, 12, 0.3);
+  --color-divine-text: #f8fafc;
+  --color-divine-text-muted: #94a3b8;
+  --color-divine-success: #22c55e;
+  --color-divine-warning: #eab308;
+  --color-divine-error: #ef4444;
+
+  /* Typography */
+  --font-devanagari: "Martel", serif;
+  --font-serif: "Lora", serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  /* Spacing */
+  --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Base styles */
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-divine-bg);
+    color: var(--color-divine-text);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Devanagari text */
+  .font-devanagari {
+    font-family: var(--font-devanagari);
+  }
+
+  /* Serif/transliteration text */
+  .font-serif {
+    font-family: var(--font-serif);
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-divine-border);
+    border-radius: 2px;
+  }
+
+  /* Remove tap highlight on mobile */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Active stanza glow effect */
+@layer utilities {
+  .stanza-glow {
+    box-shadow: 0 0 20px var(--color-divine-accent-glow),
+                0 0 40px rgba(234, 88, 12, 0.15);
+    border-color: var(--color-divine-accent);
+  }
+
+  .safe-bottom {
+    padding-bottom: var(--spacing-safe-bottom);
+  }
+}
