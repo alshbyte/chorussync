@@ -1,11 +1,9 @@
 import { motion } from 'framer-motion'
-import { Globe, Type, Palette, Vibrate, MusicIcon, ScrollText } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Globe, Vibrate, MusicIcon, ScrollText, Moon, Sun } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { ThemeToggle } from '@/components/common/ThemeToggle'
 import { FontSizeSlider } from '@/components/common/FontSizeSlider'
 import { useUIStore } from '@/stores/ui-store'
 
@@ -18,6 +16,10 @@ const scriptOptions = [
   { value: 'od', label: 'ଓଡ଼ିଆ (Odia)' },
 ]
 
+function SettingRow({ children }: { children: React.ReactNode }) {
+  return <div className="flex items-center justify-between gap-4 py-1">{children}</div>
+}
+
 export function Settings() {
   const {
     theme,
@@ -25,6 +27,7 @@ export function Settings() {
     hapticFeedback,
     showChords,
     autoScroll,
+    setTheme,
     setPreferredScript,
     toggleHapticFeedback,
     toggleShowChords,
@@ -34,55 +37,56 @@ export function Settings() {
   return (
     <div className="mx-auto max-w-lg px-4 py-6">
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="space-y-6"
+        transition={{ duration: 0.3 }}
+        className="space-y-7"
       >
-        <h1 className="text-2xl font-bold font-serif">Settings</h1>
+        <h1 className="text-xl font-semibold">Settings</h1>
 
         {/* Appearance */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Palette className="h-4 w-4 text-primary" />
-              Appearance
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label>Theme</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground capitalize">{theme}</span>
-                <ThemeToggle />
+        <section className="space-y-4">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Appearance
+          </p>
+          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+            <SettingRow>
+              <div className="flex items-center gap-2.5">
+                {theme === 'dark' ? <Moon className="h-4 w-4 text-muted-foreground" /> : <Sun className="h-4 w-4 text-muted-foreground" />}
+                <Label className="text-sm">Dark mode</Label>
               </div>
-            </div>
+              <Switch
+                checked={theme === 'dark'}
+                onCheckedChange={(v) => {
+                  setTheme(v ? 'dark' : 'light')
+                  document.documentElement.classList.toggle('dark', v)
+                }}
+              />
+            </SettingRow>
             <Separator />
             <FontSizeSlider />
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
         {/* Language */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Globe className="h-4 w-4 text-primary" />
-              Language & Script
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <section className="space-y-4">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Language
+          </p>
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-4">
-              <div>
-                <Label>Preferred Script</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Lyrics will be shown in this script
-                </p>
+              <div className="flex items-center gap-2.5">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm">Preferred script</Label>
+                  <p className="text-xs text-muted-foreground">Lyrics display language</p>
+                </div>
               </div>
               <Select
                 value={preferredScript}
                 onValueChange={(v) => setPreferredScript(v as typeof preferredScript)}
               >
-                <SelectTrigger className="w-44">
+                <SelectTrigger className="w-40 h-9 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -94,64 +98,53 @@ export function Settings() {
                 </SelectContent>
               </Select>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
         {/* Session */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Type className="h-4 w-4 text-primary" />
-              Session Preferences
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="flex items-center gap-2">
-                  <ScrollText className="h-3.5 w-3.5" />
-                  Auto-scroll
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Scroll to active stanza automatically
-                </p>
+        <section className="space-y-4">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            During sessions
+          </p>
+          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+            <SettingRow>
+              <div className="flex items-center gap-2.5">
+                <ScrollText className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm">Auto-scroll</Label>
+                  <p className="text-xs text-muted-foreground">Follow active stanza</p>
+                </div>
               </div>
               <Switch checked={autoScroll} onCheckedChange={toggleAutoScroll} />
-            </div>
+            </SettingRow>
             <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Vibrate className="h-3.5 w-3.5" />
-                  Haptic feedback
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Vibrate on stanza change
-                </p>
+            <SettingRow>
+              <div className="flex items-center gap-2.5">
+                <Vibrate className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm">Haptic feedback</Label>
+                  <p className="text-xs text-muted-foreground">Vibrate on verse change</p>
+                </div>
               </div>
               <Switch checked={hapticFeedback} onCheckedChange={toggleHapticFeedback} />
-            </div>
+            </SettingRow>
             <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="flex items-center gap-2">
-                  <MusicIcon className="h-3.5 w-3.5" />
-                  Show chords
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Display chord notations above lyrics
-                </p>
+            <SettingRow>
+              <div className="flex items-center gap-2.5">
+                <MusicIcon className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm">Show chords</Label>
+                  <p className="text-xs text-muted-foreground">Display above lyrics</p>
+                </div>
               </div>
               <Switch checked={showChords} onCheckedChange={toggleShowChords} />
-            </div>
-          </CardContent>
-        </Card>
+            </SettingRow>
+          </div>
+        </section>
 
-        {/* About */}
-        <div className="pt-2 pb-8 text-center text-xs text-muted-foreground space-y-1">
-          <p className="font-semibold">ChorusSync v0.1.0</p>
-          <p>Built with 🙏 for singing communities</p>
-        </div>
+        <p className="text-center text-xs text-muted-foreground/50 pb-4">
+          ChorusSync v0.1.0
+        </p>
       </motion.div>
     </div>
   )

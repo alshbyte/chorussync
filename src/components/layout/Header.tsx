@@ -4,13 +4,13 @@ import { ThemeToggle } from '@/components/common/ThemeToggle'
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-lg">
-      <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-4">
-        <Link to="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-orange-700">
-            <Music className="h-4 w-4 text-white" />
+    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-xl">
+      <div className="mx-auto flex h-12 max-w-lg items-center justify-between px-4">
+        <Link to="/dashboard" className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+            <Music className="h-3.5 w-3.5 text-primary-foreground" />
           </div>
-          <span className="font-serif text-lg font-bold">
+          <span className="text-sm font-semibold tracking-tight">
             Chorus<span className="text-primary">Sync</span>
           </span>
         </Link>
