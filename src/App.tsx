@@ -4,6 +4,8 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Landing } from '@/pages/Landing'
 import { Dashboard } from '@/pages/Dashboard'
 import { Settings } from '@/pages/Settings'
+import { Library } from '@/pages/Library'
+import { SessionHub } from '@/pages/SessionHub'
 import { TempleDetail } from '@/pages/TempleDetail'
 import { GroupDetail } from '@/pages/GroupDetail'
 import { SongLibrary } from '@/pages/SongLibrary'
@@ -21,6 +23,8 @@ export function App() {
         <Route path="/session/:groupId" element={<LiveSession />} />
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/library" element={<Library />} />
+          <Route path="/session" element={<SessionHub />} />
           <Route path="/temple/:templeId" element={<TempleDetail />} />
           <Route path="/temple/:templeId/songs" element={<SongLibrary />} />
           <Route path="/temple/:templeId/songs/new" element={<AddSong />} />
