@@ -17,6 +17,14 @@ export interface ActiveSession {
   startedAt: string
 }
 
+export interface SessionRecord {
+  id: string
+  groupId: string
+  songIds: string[]
+  startedAt: string
+  endedAt: string
+}
+
 interface CommunityState {
   userId: string
   userName: string
@@ -25,6 +33,7 @@ interface CommunityState {
   memberships: Membership[]
   songs: Song[]
   activeSessions: ActiveSession[]
+  sessionHistory: SessionRecord[]
 
   setUserName: (name: string) => void
   createTemple: (name: string, description?: string) => Temple
@@ -41,6 +50,7 @@ interface CommunityState {
   startSession: (groupId: string, songId: string) => ActiveSession
   endSession: (groupId: string) => void
   setSessionStanza: (groupId: string, index: number) => void
+  setSessionSong: (groupId: string, songId: string) => void
   getActiveSession: (groupId: string) => ActiveSession | undefined
 }
 
@@ -67,6 +77,7 @@ export const useCommunityStore = create<CommunityState>()(
       memberships: [],
       songs: [],
       activeSessions: [],
+      sessionHistory: [],
 
       setUserName: (n) => set({ userName: n }),
 
@@ -164,13 +175,36 @@ export const useCommunityStore = create<CommunityState>()(
         return sess
       },
 
-      endSession: (groupId) =>
-        set((s) => ({ activeSessions: s.activeSessions.filter((x) => x.groupId !== groupId) })),
+      endSession: (groupId) => {
+        const session = get().activeSessions.find((x) => x.groupId === groupId)
+        if (session) {
+          const record: SessionRecord = {
+            id: genId(),
+            groupId,
+            songIds: [session.songId],
+            startedAt: session.startedAt,
+            endedAt: new Date().toISOString(),
+          }
+          set((s) => ({
+            activeSessions: s.activeSessions.filter((x) => x.groupId !== groupId),
+            sessionHistory: [...s.sessionHistory, record],
+          }))
+        } else {
+          set((s) => ({ activeSessions: s.activeSessions.filter((x) => x.groupId !== groupId) }))
+        }
+      },
 
       setSessionStanza: (groupId, index) =>
         set((s) => ({
           activeSessions: s.activeSessions.map((x) =>
             x.groupId === groupId ? { ...x, currentStanzaIndex: index } : x,
+          ),
+        })),
+
+      setSessionSong: (groupId, songId) =>
+        set((s) => ({
+          activeSessions: s.activeSessions.map((x) =>
+            x.groupId === groupId ? { ...x, songId, currentStanzaIndex: 0 } : x,
           ),
         })),
 

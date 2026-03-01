@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useCommunityStore } from '@/stores/community-store'
+import { QRCodeDisplay } from '@/components/common/QRCodeDisplay'
 
 export function TempleDetail() {
   const { templeId } = useParams<{ templeId: string }>()
@@ -73,6 +74,7 @@ export function TempleDetail() {
             )}
             {temple.inviteCode}
           </button>
+          <QRCodeDisplay code={temple.inviteCode} label={temple.name} />
         </div>
 
         {/* Song Library */}

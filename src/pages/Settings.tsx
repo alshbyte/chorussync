@@ -1,11 +1,13 @@
 import { motion } from 'framer-motion'
-import { Globe, Vibrate, MusicIcon, ScrollText, Moon, Sun } from 'lucide-react'
+import { Globe, Vibrate, MusicIcon, ScrollText, Moon, Sun, User } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { FontSizeSlider } from '@/components/common/FontSizeSlider'
 import { useUIStore } from '@/stores/ui-store'
+import { useCommunityStore } from '@/stores/community-store'
 
 const scriptOptions = [
   { value: 'original', label: 'Original script' },
@@ -33,6 +35,7 @@ export function Settings() {
     toggleShowChords,
     toggleAutoScroll,
   } = useUIStore()
+  const { userName, setUserName } = useCommunityStore()
 
   return (
     <div className="mx-auto max-w-lg px-4 py-6">
@@ -43,6 +46,27 @@ export function Settings() {
         className="space-y-7"
       >
         <h1 className="text-xl font-semibold">Settings</h1>
+
+        {/* Profile */}
+        <section className="space-y-4">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Profile
+          </p>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2.5">
+              <User className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1">
+                <Label className="text-sm">Display Name</Label>
+                <Input
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  placeholder="Your name"
+                  className="mt-1.5 h-9"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Appearance */}
         <section className="space-y-4">

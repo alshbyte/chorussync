@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCommunityStore } from '@/stores/community-store'
+import { QRCodeDisplay } from '@/components/common/QRCodeDisplay'
 
 export function GroupDetail() {
   const { groupId } = useParams<{ groupId: string }>()
@@ -22,6 +23,7 @@ export function GroupDetail() {
   const members = store.memberships.filter((m) => m.groupId === groupId)
   const songs = store.songs.filter((s) => s.templeId === group.templeId)
   const session = store.activeSessions.find((s) => s.groupId === groupId)
+  const history = store.sessionHistory.filter((h) => h.groupId === groupId).slice(-5).reverse()
   const isLeader = members.some(
     (m) => m.userId === store.userId && (m.role === 'leader' || m.role === 'admin'),
   )
@@ -65,6 +67,7 @@ export function GroupDetail() {
             )}
             {group.inviteCode}
           </button>
+          <QRCodeDisplay code={group.inviteCode} label={group.name} />
         </div>
 
         {/* Active Session Banner */}
@@ -149,6 +152,33 @@ export function GroupDetail() {
             ))}
           </div>
         </div>
+
+        {/* Session History */}
+        {history.length > 0 && (
+          <div>
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+              Recent Sessions
+            </h2>
+            <div className="space-y-1.5">
+              {history.map((h) => {
+                const songNames = h.songIds
+                  .map((id) => store.songs.find((s) => s.id === id)?.title)
+                  .filter(Boolean)
+                return (
+                  <div key={h.id} className="flex items-center gap-3 rounded-xl border border-border p-3">
+                    <Music className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{songNames.join(', ') || 'Session'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(h.endedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>
   )
