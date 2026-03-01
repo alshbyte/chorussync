@@ -1,0 +1,155 @@
+import { useParams, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { ArrowLeft, Copy, Check, Play, Music, Radio } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useCommunityStore } from '@/stores/community-store'
+
+export function GroupDetail() {
+  const { groupId } = useParams<{ groupId: string }>()
+  const navigate = useNavigate()
+  const store = useCommunityStore()
+  const [copied, setCopied] = useState(false)
+  const [songPickerOpen, setSongPickerOpen] = useState(false)
+
+  const group = store.groups.find((g) => g.id === groupId)
+  if (!group)
+    return <div className="p-6 text-center text-muted-foreground">Group not found</div>
+
+  const temple = store.temples.find((t) => t.id === group.templeId)
+  const members = store.memberships.filter((m) => m.groupId === groupId)
+  const songs = store.songs.filter((s) => s.templeId === group.templeId)
+  const session = store.activeSessions.find((s) => s.groupId === groupId)
+  const isLeader = members.some(
+    (m) => m.userId === store.userId && (m.role === 'leader' || m.role === 'admin'),
+  )
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(group.inviteCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleStartSession = (songId: string) => {
+    store.startSession(groupId!, songId)
+    setSongPickerOpen(false)
+    navigate(`/session/${groupId}`)
+  }
+
+  return (
+    <div className="mx-auto max-w-lg px-4 py-4">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+      >
+        <button
+          onClick={() => navigate(`/temple/${group.templeId}`)}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> {temple?.name || 'Back'}
+        </button>
+
+        <div>
+          <h1 className="text-xl font-semibold">{group.name}</h1>
+          <button
+            onClick={copyCode}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-mono tracking-wider"
+          >
+            {copied ? (
+              <Check className="h-3 w-3 text-green-500" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+            {group.inviteCode}
+          </button>
+        </div>
+
+        {/* Active Session Banner */}
+        {session && (
+          <button
+            onClick={() => navigate(`/session/${groupId}`)}
+            className="w-full flex items-center gap-3 rounded-xl bg-primary/10 border border-primary/20 p-4 active:scale-[0.99] transition-all"
+          >
+            <div className="relative">
+              <Radio className="h-5 w-5 text-primary" />
+              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-primary">Live Session Active</p>
+              <p className="text-xs text-muted-foreground">Tap to join</p>
+            </div>
+          </button>
+        )}
+
+        {/* Start Session */}
+        {!session && isLeader && (
+          <>
+            <Button
+              onClick={() =>
+                songs.length > 0
+                  ? setSongPickerOpen(true)
+                  : navigate(`/temple/${group.templeId}/songs/new`)
+              }
+              className="w-full gap-2 h-12"
+              size="lg"
+            >
+              <Play className="h-4 w-4" />
+              {songs.length > 0 ? 'Start Session' : 'Add Songs First'}
+            </Button>
+
+            <Dialog open={songPickerOpen} onOpenChange={setSongPickerOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Pick a Song</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {songs.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleStartSession(s.id)}
+                      className="w-full flex items-center gap-3 rounded-xl border border-border p-3 hover:bg-muted/50 active:scale-[0.99] transition-all text-left"
+                    >
+                      <Music className="h-4 w-4 text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{s.title}</p>
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {s.category} · {s.deity}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </>
+        )}
+
+        {/* Members */}
+        <div>
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+            Members ({members.length})
+          </h2>
+          <div className="space-y-1.5">
+            {members.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 rounded-xl p-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  {m.displayName[0]?.toUpperCase()}
+                </div>
+                <span className="text-sm flex-1">{m.displayName}</span>
+                <Badge
+                  variant={m.role === 'leader' ? 'default' : 'secondary'}
+                  className="text-[10px] capitalize"
+                >
+                  {m.role}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
