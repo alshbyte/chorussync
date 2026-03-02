@@ -10,6 +10,7 @@ import {
   VolumeX,
   SkipForward,
   Music,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -17,6 +18,8 @@ import { useCommunityStore } from '@/stores/community-store'
 import { useUIStore } from '@/stores/ui-store'
 import { createSyncChannel, type SyncPayload } from '@/lib/sync-engine'
 import { startDrone, stopDrone } from '@/lib/audio'
+import { transliterateStanzas, isGeminiConfigured } from '@/lib/gemini'
+import type { Stanza } from '@/types/song'
 
 const FONT_SIZE: Record<string, { normal: string; active: string }> = {
   small: { normal: 'text-sm', active: 'text-base' },
@@ -29,13 +32,15 @@ export function LiveSession() {
   const { groupId } = useParams<{ groupId: string }>()
   const navigate = useNavigate()
   const store = useCommunityStore()
-  const { fontSize, hapticFeedback, autoScroll } = useUIStore()
+  const { fontSize, hapticFeedback, autoScroll, preferredScript } = useUIStore()
   const syncRef = useRef<ReturnType<typeof createSyncChannel> | null>(null)
   const touchRef = useRef<{ y: number; time: number } | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [raisedHands, setRaisedHands] = useState<{ name: string; time: number }[]>([])
   const [droneOn, setDroneOn] = useState(false)
   const [songPickerOpen, setSongPickerOpen] = useState(false)
+  const [transliterated, setTransliterated] = useState<Stanza[] | null>(null)
+  const [transLoading, setTransLoading] = useState(false)
 
   const session = store.activeSessions.find((s) => s.groupId === groupId)
   const song = session ? store.songs.find((s) => s.id === session.songId) : null
@@ -102,6 +107,25 @@ export function LiveSession() {
   useEffect(() => {
     if (session) setActiveIndex(session.currentStanzaIndex)
   }, [])
+
+  // Transliterate stanzas when song or preferredScript changes
+  useEffect(() => {
+    if (!song || preferredScript === 'original' || !isGeminiConfigured()) {
+      setTransliterated(null)
+      return
+    }
+    let cancelled = false
+    setTransLoading(true)
+    transliterateStanzas(song.stanzas, preferredScript).then((result) => {
+      if (!cancelled) {
+        setTransliterated(result)
+        setTransLoading(false)
+      }
+    }).catch(() => {
+      if (!cancelled) setTransLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [song?.id, preferredScript])
 
   // Auto-scroll to active stanza
   useEffect(() => {
@@ -260,8 +284,14 @@ export function LiveSession() {
 
       {/* Stanzas */}
       <div className="flex-1 overflow-y-auto px-4 py-6 pb-36">
+        {transLoading && (
+          <div className="mx-auto max-w-lg flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground mb-3">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Transliterating…
+          </div>
+        )}
         <div className="mx-auto max-w-lg space-y-3">
-          {song.stanzas.map((stanza, idx) => {
+          {(transliterated || song.stanzas).map((stanza, idx) => {
             const isActive = idx === activeIndex
             return (
               <div
@@ -282,14 +312,23 @@ export function LiveSession() {
                   {stanza.label}
                 </p>
                 <div className="space-y-1">
-                  {stanza.lines.map((line, i) => (
-                    <p
-                      key={i}
-                      className={`font-serif leading-relaxed ${isActive ? sizes.active : sizes.normal}`}
-                    >
-                      {line.text}
-                    </p>
-                  ))}
+                  {stanza.lines.map((line, i) => {
+                    const transText = preferredScript !== 'original'
+                      ? line.transliterations[preferredScript as keyof typeof line.transliterations]
+                      : null
+                    return (
+                      <div key={i}>
+                        <p className={`font-serif leading-relaxed ${isActive ? sizes.active : sizes.normal}`}>
+                          {transText || line.text}
+                        </p>
+                        {transText && (
+                          <p className={`text-muted-foreground leading-relaxed ${isActive ? 'text-xs' : 'text-[10px]'}`}>
+                            {line.text}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )

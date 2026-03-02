@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Search, Sparkles, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useCommunityStore } from '@/stores/community-store'
+import { searchSongLyrics, formatLyrics, isGeminiConfigured } from '@/lib/gemini'
 import type { SongCategory, Deity } from '@/types/song'
 
 const CATEGORIES: { value: SongCategory; label: string }[] = [
@@ -49,11 +50,65 @@ export function AddSong() {
   const [category, setCategory] = useState<SongCategory>('bhajan')
   const [deity, setDeity] = useState<Deity>('krishna')
   const [lyrics, setLyrics] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [formatting, setFormatting] = useState(false)
+  const [aiMessage, setAiMessage] = useState('')
+  const aiEnabled = isGeminiConfigured()
 
   const handleSave = () => {
     if (!title.trim() || !lyrics.trim() || !templeId) return
     addSong(templeId, title.trim(), category, deity, lyrics)
     navigate(`/temple/${templeId}/songs`)
+  }
+
+  const handleAISearch = async () => {
+    if (!searchQuery.trim() || !aiEnabled) return
+    setSearching(true)
+    setAiMessage('')
+    try {
+      const result = await searchSongLyrics(searchQuery)
+      if (result) {
+        setTitle(result.title)
+        setLyrics(result.lyrics)
+        setCategory(result.category)
+        setDeity(result.deity)
+        setAiMessage('✨ Found! Review and save.')
+      } else {
+        setAiMessage('Song not found. Try a different query or paste lyrics manually.')
+      }
+    } catch (e: unknown) {
+      const msg = (e as Error).message;
+      setAiMessage(
+        msg === 'RATE_LIMIT'
+          ? '⏳ Rate limit reached. Wait a minute and try again.'
+          : 'AI search failed. Please paste lyrics manually.',
+      )
+    }
+    setSearching(false)
+  }
+
+  const handleSmartFormat = async () => {
+    if (!lyrics.trim() || !aiEnabled) return
+    setFormatting(true)
+    setAiMessage('')
+    try {
+      const result = await formatLyrics(lyrics)
+      if (result) {
+        setLyrics(result.formatted)
+        setAiMessage(`✨ Formatted into ${result.stanzaLabels.length} stanzas: ${result.stanzaLabels.join(', ')}`)
+      } else {
+        setAiMessage('Formatting failed. Please format manually.')
+      }
+    } catch (e: unknown) {
+      const msg = (e as Error).message;
+      setAiMessage(
+        msg === 'RATE_LIMIT'
+          ? '⏳ Rate limit reached. Wait a minute and try again.'
+          : 'AI formatting failed.',
+      )
+    }
+    setFormatting(false)
   }
 
   const stanzaCount = lyrics.split(/\n\s*\n/).filter((b) => b.trim()).length
@@ -73,6 +128,32 @@ export function AddSong() {
         </button>
 
         <h1 className="text-xl font-semibold">Add Song</h1>
+
+        {/* AI Search */}
+        {aiEnabled && (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-primary">
+              <Sparkles className="h-4 w-4" />
+              AI Song Search
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by song name, e.g. 'Om Jai Jagdish'"
+                className="flex-1"
+                onKeyDown={(e) => e.key === 'Enter' && handleAISearch()}
+              />
+              <Button onClick={handleAISearch} disabled={searching || !searchQuery.trim()} size="icon" className="shrink-0">
+                {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {aiMessage && (
+          <p className="text-sm text-muted-foreground">{aiMessage}</p>
+        )}
 
         <div className="space-y-4">
           <div>
@@ -119,7 +200,21 @@ export function AddSong() {
           </div>
 
           <div>
-            <Label>Lyrics</Label>
+            <div className="flex items-center justify-between">
+              <Label>Lyrics</Label>
+              {aiEnabled && lyrics.trim() && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5 text-primary"
+                  onClick={handleSmartFormat}
+                  disabled={formatting}
+                >
+                  {formatting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  Smart Format
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground mt-0.5 mb-1.5">
               Separate stanzas with a blank line. First stanza becomes the Chorus.
             </p>
