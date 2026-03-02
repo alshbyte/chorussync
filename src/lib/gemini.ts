@@ -1,44 +1,143 @@
 import { GoogleGenAI } from '@google/genai';
 import type { ScriptCode, SongCategory, Deity, Stanza } from '@/types/song';
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string;
+// ── Provider Configuration ──────────────────────────────────────────
+const groqKey = import.meta.env.VITE_GROQ_API_KEY as string;
+const geminiKey = import.meta.env.VITE_GEMINI_API_KEY as string;
 
-if (!apiKey) {
-  console.warn('Gemini API key not found. Set VITE_GEMINI_API_KEY in .env.local');
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+const genai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : null;
+
+const hasGroq = !!groqKey;
+const hasGemini = !!geminiKey;
+
+if (!hasGroq && !hasGemini) {
+  console.warn('No AI provider configured. Set VITE_GROQ_API_KEY or VITE_GEMINI_API_KEY in .env.local');
 }
 
-export const genai = new GoogleGenAI({ apiKey: apiKey || 'placeholder' });
+// ── Transliteration Cache (localStorage) ────────────────────────────
+const CACHE_PREFIX = 'chorusync:trans:';
 
-export const GEMINI_MODEL = 'gemini-2.0-flash';
+function getCachedTransliteration(key: string): unknown | null {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
 
-async function callGemini(prompt: string, retries = 2): Promise<string | null> {
-  if (!isGeminiConfigured()) return null;
-  for (let i = 0; i <= retries; i++) {
-    try {
-      const res = await genai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-      });
-      return res.text?.replace(/```json\n?|\n?```/g, '').trim() || null;
-    } catch (e: unknown) {
-      const status = (e as { status?: number }).status;
-      if (status === 429 && i < retries) {
-        await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
-        continue;
+function setCachedTransliteration(key: string, data: unknown): void {
+  try {
+    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(data));
+  } catch { /* quota exceeded — silently skip */ }
+}
+
+function makeTransCacheKey(stanzas: Stanza[], script: ScriptCode): string {
+  const fingerprint = stanzas.map(s => s.lines.map(l => l.text).join('|')).join('||');
+  // Simple hash to keep key short
+  let hash = 0;
+  for (let i = 0; i < fingerprint.length; i++) {
+    hash = ((hash << 5) - hash + fingerprint.charCodeAt(i)) | 0;
+  }
+  return `${Math.abs(hash).toString(36)}:${stanzas.length}:${script}`;
+}
+
+// ── Provider Calls ──────────────────────────────────────────────────
+function cleanResponse(text: string): string {
+  return text.replace(/```json\n?|\n?```/g, '').trim();
+}
+
+async function callGroq(prompt: string): Promise<string | null> {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${groqKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 4096,
+    }),
+  });
+  if (res.status === 429) throw new Error('RATE_LIMIT');
+  if (!res.ok) throw new Error(`Groq error: ${res.status}`);
+  const data = await res.json();
+  return cleanResponse(data.choices?.[0]?.message?.content || '');
+}
+
+async function callGeminiProvider(prompt: string): Promise<string | null> {
+  if (!genai) return null;
+  const res = await genai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: prompt,
+  });
+  return cleanResponse(res.text || '');
+}
+
+// ── Unified AI Call (Groq → Gemini fallback) ────────────────────────
+async function callAI(prompt: string, retries = 1): Promise<string | null> {
+  if (!hasGroq && !hasGemini) return null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    // Try Groq first (better free tier)
+    if (hasGroq) {
+      try {
+        const result = await callGroq(prompt);
+        if (result) return result;
+      } catch (e: unknown) {
+        const msg = (e as Error).message;
+        if (msg === 'RATE_LIMIT' && hasGemini) {
+          console.warn('Groq rate limited, falling back to Gemini');
+        } else if (msg === 'RATE_LIMIT' && !hasGemini) {
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+            continue;
+          }
+          throw new Error('RATE_LIMIT');
+        } else {
+          console.warn('Groq error, trying Gemini:', msg);
+        }
       }
-      if (status === 429) {
-        console.warn('Gemini API rate limit reached. Try again in a minute.');
-        throw new Error('RATE_LIMIT');
+    }
+
+    // Fallback to Gemini
+    if (hasGemini) {
+      try {
+        const result = await callGeminiProvider(prompt);
+        if (result) return result;
+      } catch (e: unknown) {
+        const status = (e as { status?: number }).status;
+        if (status === 429) {
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+            continue;
+          }
+          throw new Error('RATE_LIMIT');
+        }
+        console.error('Gemini error:', e);
       }
-      console.error('Gemini API error:', e);
-      return null;
     }
   }
+
   return null;
 }
 
+// ── Public API ───────────────────────────────────────────────────────
+
+/** Returns true if at least one AI provider is configured */
 export function isGeminiConfigured(): boolean {
-  return !!apiKey && apiKey !== 'placeholder';
+  return hasGroq || hasGemini;
+}
+
+/** Which providers are active */
+export function getActiveProviders(): string[] {
+  const providers: string[] = [];
+  if (hasGroq) providers.push('Groq');
+  if (hasGemini) providers.push('Gemini');
+  return providers;
 }
 
 const SCRIPT_NAMES: Record<string, string> = {
@@ -57,7 +156,7 @@ export async function searchSongLyrics(query: string): Promise<{
   deity: Deity;
   language: string;
 } | null> {
-  const text = await callGemini(`You are a Hindu devotional music expert. Find the complete lyrics for: "${query}"
+  const text = await callAI(`You are a Hindu devotional music expert. Find the complete lyrics for: "${query}"
 
 Return ONLY valid JSON (no markdown fences):
 {
@@ -85,7 +184,7 @@ export async function formatLyrics(rawLyrics: string): Promise<{
   formatted: string;
   stanzaLabels: string[];
 } | null> {
-  const text = await callGemini(`You are a lyrics formatting expert for devotional songs (Bhajans, Aartis, Kirtans).
+  const text = await callAI(`You are a lyrics formatting expert for devotional songs (Bhajans, Aartis, Kirtans).
 
 Clean and format these raw lyrics into proper stanzas:
 ---
@@ -114,12 +213,19 @@ Return ONLY valid JSON (no markdown fences):
   }
 }
 
-// ── Transliteration ─────────────────────────────────────────────────
+// ── Transliteration (with localStorage cache) ───────────────────────
 export async function transliterateStanzas(
   stanzas: Stanza[],
   targetScript: ScriptCode,
 ): Promise<Stanza[] | null> {
   if (targetScript === 'original') return null;
+
+  // Check localStorage cache first
+  const cacheKey = makeTransCacheKey(stanzas, targetScript);
+  const cached = getCachedTransliteration(cacheKey) as { index: number; lines: string[] }[] | null;
+  if (cached) {
+    return applyTransliterationData(stanzas, cached, targetScript);
+  }
 
   const scriptName = SCRIPT_NAMES[targetScript] || targetScript;
   const linesPayload = stanzas.map((s) => ({
@@ -127,7 +233,7 @@ export async function transliterateStanzas(
     lines: s.lines.map((l) => l.text),
   }));
 
-  const text = await callGemini(`You are an expert in Indian language transliteration.
+  const text = await callAI(`You are an expert in Indian language transliteration.
 
 Transliterate these song lyrics into ${scriptName}.
 
@@ -150,23 +256,34 @@ Return ONLY valid JSON (no markdown fences) as an array:
     if (!text) return null;
     const data: { index: number; lines: string[] }[] = JSON.parse(text);
 
-    return stanzas.map((stanza) => {
-      const match = data.find((d) => d.index === stanza.index);
-      if (!match) return stanza;
-      return {
-        ...stanza,
-        lines: stanza.lines.map((line, i) => ({
-          ...line,
-          transliterations: {
-            ...line.transliterations,
-            [targetScript]: match.lines[i] || line.text,
-          },
-        })),
-      };
-    });
+    // Cache the raw API response for future use
+    setCachedTransliteration(cacheKey, data);
+
+    return applyTransliterationData(stanzas, data, targetScript);
   } catch {
     return null;
   }
+}
+
+function applyTransliterationData(
+  stanzas: Stanza[],
+  data: { index: number; lines: string[] }[],
+  targetScript: ScriptCode,
+): Stanza[] {
+  return stanzas.map((stanza) => {
+    const match = data.find((d) => d.index === stanza.index);
+    if (!match) return stanza;
+    return {
+      ...stanza,
+      lines: stanza.lines.map((line, i) => ({
+        ...line,
+        transliterations: {
+          ...line.transliterations,
+          [targetScript]: match.lines[i] || line.text,
+        },
+      })),
+    };
+  });
 }
 
 // ── Single-line transliteration cache helper ────────────────────────
@@ -181,7 +298,7 @@ export async function transliterateLine(
   if (transCache.has(key)) return transCache.get(key)!;
 
   const scriptName = SCRIPT_NAMES[targetScript] || targetScript;
-  const result = await callGemini(
+  const result = await callAI(
     `Transliterate to ${scriptName}. Return ONLY the transliterated text, nothing else:\n${text}`,
   );
 
