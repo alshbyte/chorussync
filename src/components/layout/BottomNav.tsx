@@ -16,8 +16,9 @@ export function BottomNav() {
           <NavLink
             key={to}
             to={to}
+            aria-label={label}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 rounded-lg px-4 py-1.5 text-[11px] font-medium transition-colors ${
+              `flex flex-col items-center gap-0.5 rounded-lg px-4 py-1.5 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
                 isActive
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
