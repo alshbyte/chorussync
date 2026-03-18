@@ -24,7 +24,7 @@ interface UIState {
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
-      theme: 'dark',
+      theme: 'light',
       fontSize: 'medium',
       preferredScript: 'original',
       hapticFeedback: true,

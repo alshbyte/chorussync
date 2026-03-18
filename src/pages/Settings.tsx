@@ -19,7 +19,7 @@ const scriptOptions = [
 ]
 
 function SettingRow({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center justify-between gap-4 py-1">{children}</div>
+  return <div className="flex items-center justify-between gap-4 py-1.5">{children}</div>
 }
 
 export function Settings() {
@@ -45,7 +45,7 @@ export function Settings() {
         transition={{ duration: 0.3 }}
         className="space-y-7"
       >
-        <h1 className="text-xl font-semibold">Settings</h1>
+        <h1 className="text-xl font-bold text-foreground">Settings</h1>
 
         {/* Profile */}
         <section className="space-y-4">
@@ -56,7 +56,7 @@ export function Settings() {
             <div className="flex items-center gap-2.5">
               <User className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="flex-1">
-                <Label className="text-sm">Display Name</Label>
+                <Label className="text-sm font-medium text-foreground">Display Name</Label>
                 <Input
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
@@ -77,7 +77,7 @@ export function Settings() {
             <SettingRow>
               <div className="flex items-center gap-2.5">
                 {theme === 'dark' ? <Moon className="h-4 w-4 text-muted-foreground" /> : <Sun className="h-4 w-4 text-muted-foreground" />}
-                <Label className="text-sm">Dark mode</Label>
+                <Label className="text-sm font-medium text-foreground">Dark mode</Label>
               </div>
               <Switch
                 checked={theme === 'dark'}
@@ -102,7 +102,7 @@ export function Settings() {
               <div className="flex items-center gap-2.5">
                 <Globe className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <Label className="text-sm">Preferred script</Label>
+                  <Label className="text-sm font-medium text-foreground">Preferred script</Label>
                   <p className="text-xs text-muted-foreground">Lyrics display language</p>
                 </div>
               </div>
@@ -135,7 +135,7 @@ export function Settings() {
               <div className="flex items-center gap-2.5">
                 <ScrollText className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <Label className="text-sm">Auto-scroll</Label>
+                  <Label className="text-sm font-medium text-foreground">Auto-scroll</Label>
                   <p className="text-xs text-muted-foreground">Follow active stanza</p>
                 </div>
               </div>
@@ -146,7 +146,7 @@ export function Settings() {
               <div className="flex items-center gap-2.5">
                 <Vibrate className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <Label className="text-sm">Haptic feedback</Label>
+                  <Label className="text-sm font-medium text-foreground">Haptic feedback</Label>
                   <p className="text-xs text-muted-foreground">Vibrate on verse change</p>
                 </div>
               </div>
@@ -157,7 +157,7 @@ export function Settings() {
               <div className="flex items-center gap-2.5">
                 <MusicIcon className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <Label className="text-sm">Show chords</Label>
+                  <Label className="text-sm font-medium text-foreground">Show chords</Label>
                   <p className="text-xs text-muted-foreground">Display above lyrics</p>
                 </div>
               </div>
