@@ -57,9 +57,9 @@ export function AddSong() {
   const [aiError, setAiError] = useState(false)
   const aiEnabled = isGeminiConfigured()
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim() || !lyrics.trim() || !templeId) return
-    addSong(templeId, title.trim(), category, deity, lyrics)
+    await addSong(templeId, title.trim(), category, deity, lyrics)
     navigate(`/temple/${templeId}/songs`)
   }
 

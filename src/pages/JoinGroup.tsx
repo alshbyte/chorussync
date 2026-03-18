@@ -28,27 +28,25 @@ export function JoinGroup() {
       return
     }
     setLoading(true)
-    const upper = code.toUpperCase()
-    const temple = store.temples.find((t) => t.inviteCode === upper)
-    if (temple) {
-      setResult({ type: 'temple', id: temple.id, templeId: temple.id })
+    // Look up code from Supabase (cloud-first)
+    import('@/lib/supabase-db').then(async ({ dbFindByInviteCode }) => {
+      const found = await dbFindByInviteCode(code.toUpperCase())
+      if (found) {
+        setResult({ type: found.type, id: (found.data as { id: string }).id, templeId: found.templeId })
+      } else {
+        setNotFound(true)
+      }
       setLoading(false)
-      return
-    }
-    const group = store.groups.find((g) => g.inviteCode === upper)
-    if (group) {
-      setResult({ type: 'group', id: group.id, templeId: group.templeId })
+    }).catch(() => {
+      setNotFound(true)
       setLoading(false)
-      return
-    }
-    setNotFound(true)
-    setLoading(false)
+    })
   }, [code])
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!code) return
     store.setUserName(name.trim() || 'Singer')
-    const r = store.joinByCode(code)
+    const r = await store.joinByCode(code)
     if (r) {
       setJoined(true)
       setTimeout(() => {

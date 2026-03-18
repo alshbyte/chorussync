@@ -24,9 +24,9 @@ export function Dashboard() {
 
   const myTemples = temples.filter((t) => t.createdBy === userId)
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!templeName.trim()) return
-    const t = createTemple(templeName.trim(), templeDesc.trim() || undefined)
+    const t = await createTemple(templeName.trim(), templeDesc.trim() || undefined)
     setTempleName('')
     setTempleDesc('')
     setDialogOpen(false)

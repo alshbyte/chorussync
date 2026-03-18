@@ -35,8 +35,8 @@ export function GroupDetail() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleStartSession = (songId: string) => {
-    store.startSession(groupId!, songId)
+  const handleStartSession = async (songId: string) => {
+    await store.startSession(groupId!, songId)
     setSongPickerOpen(false)
     navigate(`/session/${groupId}`)
   }

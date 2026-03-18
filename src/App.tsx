@@ -1,10 +1,12 @@
 import { Routes, Route } from 'react-router-dom'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'
 import { Landing } from '@/pages/Landing'
 import { NotFound } from '@/pages/NotFound'
+import { useCommunityStore } from '@/stores/community-store'
+import { subscribeToSessions } from '@/lib/supabase-db'
 
 // Code-split heavy pages
 const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -24,6 +26,22 @@ function Fallback() {
 }
 
 export function App() {
+  const loadFromCloud = useCommunityStore((s) => s.loadFromCloud)
+  const refreshSessions = useCommunityStore((s) => s.refreshSessions)
+
+  // Load data from Supabase on mount
+  useEffect(() => {
+    loadFromCloud()
+  }, [loadFromCloud])
+
+  // Subscribe to realtime session changes
+  useEffect(() => {
+    const channel = subscribeToSessions(() => {
+      refreshSessions()
+    })
+    return () => { channel.unsubscribe() }
+  }, [refreshSessions])
+
   return (
     <TooltipProvider>
       <Suspense fallback={<Fallback />}>

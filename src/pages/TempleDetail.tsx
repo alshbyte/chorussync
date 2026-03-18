@@ -31,9 +31,9 @@ export function TempleDetail() {
   const templeGroups = store.groups.filter((g) => g.templeId === templeId)
   const templeSongs = store.songs.filter((s) => s.templeId === templeId)
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (!groupName.trim() || !templeId) return
-    createGroup(templeId, groupName.trim())
+    await createGroup(templeId, groupName.trim())
     setGroupName('')
     setDialogOpen(false)
   }
