@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useCommunityStore } from '@/stores/community-store'
 import { useUIStore } from '@/stores/ui-store'
 import { createSyncChannel, type SyncPayload } from '@/lib/sync-engine'
-import { startDrone, stopDrone } from '@/lib/audio'
+import { startDrone, stopDrone, SA_KEYS } from '@/lib/audio'
 import { transliterateStanzas, isGeminiConfigured } from '@/lib/gemini'
 import type { Stanza } from '@/types/song'
 
@@ -33,12 +33,13 @@ export function LiveSession() {
   const { groupId } = useParams<{ groupId: string }>()
   const navigate = useNavigate()
   const store = useCommunityStore()
-  const { fontSize, hapticFeedback, autoScroll, preferredScript } = useUIStore()
+  const { fontSize, hapticFeedback, autoScroll, preferredScript, showChords } = useUIStore()
   const syncRef = useRef<ReturnType<typeof createSyncChannel> | null>(null)
   const touchRef = useRef<{ y: number; time: number } | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [raisedHands, setRaisedHands] = useState<{ name: string; time: number }[]>([])
   const [droneOn, setDroneOn] = useState(false)
+  const [droneKey, setDroneKey] = useState('C')
   const [songPickerOpen, setSongPickerOpen] = useState(false)
   const [transliterated, setTransliterated] = useState<Stanza[] | null>(null)
   const [transLoading, setTransLoading] = useState(false)
@@ -231,8 +232,18 @@ export function LiveSession() {
       stopDrone()
       setDroneOn(false)
     } else {
-      startDrone('C')
+      startDrone(droneKey)
       setDroneOn(true)
+    }
+  }
+
+  const cycleDroneKey = () => {
+    const idx = SA_KEYS.indexOf(droneKey)
+    const next = SA_KEYS[(idx + 1) % SA_KEYS.length]
+    setDroneKey(next)
+    if (droneOn) {
+      stopDrone()
+      setTimeout(() => startDrone(next), 450)
     }
   }
 
@@ -305,10 +316,20 @@ export function LiveSession() {
           <div className="flex items-center gap-1.5">
             <button
               onClick={toggleDrone}
+              onDoubleClick={cycleDroneKey}
               className={`p-2 rounded-lg min-w-[36px] min-h-[36px] flex items-center justify-center transition-colors ${droneOn ? 'text-primary bg-primary/10' : 'text-muted-foreground'}`}
+              title={`Sa Drone: ${droneKey} (double-tap to change key)`}
             >
               {droneOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </button>
+            {droneOn && (
+              <button
+                onClick={cycleDroneKey}
+                className="text-[10px] font-mono text-primary bg-primary/10 rounded px-1.5 py-0.5 min-w-[24px] text-center"
+              >
+                {droneKey}
+              </button>
+            )}
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               Live
@@ -366,6 +387,11 @@ export function LiveSession() {
                       : null
                     return (
                       <div key={i}>
+                        {showChords && line.chords && (
+                          <p className={`font-mono text-primary/70 ${isActive ? 'text-xs' : 'text-[10px]'}`}>
+                            {line.chords}
+                          </p>
+                        )}
                         <p className={`font-serif leading-relaxed ${isActive ? sizes.active : sizes.normal}`}>
                           {transText || line.text}
                         </p>

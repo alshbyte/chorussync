@@ -22,7 +22,7 @@ export function SongView() {
   const { templeId, songId } = useParams<{ templeId: string; songId: string }>()
   const navigate = useNavigate()
   const { songs, deleteSong } = useCommunityStore()
-  const { preferredScript } = useUIStore()
+  const { preferredScript, showChords } = useUIStore()
 
   const song = songs.find((s) => s.id === songId)
   const [transliterated, setTransliterated] = useState<Stanza[] | null>(null)
@@ -109,26 +109,27 @@ export function SongView() {
           </div>
         </div>
 
-        {/* Script Selector */}
-        {aiEnabled && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <Languages className="h-4 w-4 text-muted-foreground shrink-0" />
-            {Object.entries(SCRIPT_LABELS).map(([code, label]) => (
-              <button
-                key={code}
-                onClick={() => handleTransliterate(code as ScriptCode)}
-                className={[
-                  'shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                  activeScript === code
-                    ? 'bg-primary text-primary-foreground'
+        {/* Script Selector — always show, AI triggers transliteration on non-original */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
+          <Languages className="h-4 w-4 text-muted-foreground shrink-0" />
+          {Object.entries(SCRIPT_LABELS).map(([code, label]) => (
+            <button
+              key={code}
+              onClick={() => handleTransliterate(code as ScriptCode)}
+              disabled={code !== 'original' && !aiEnabled}
+              className={[
+                'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[32px]',
+                activeScript === code
+                  ? 'bg-primary text-primary-foreground'
+                  : code !== 'original' && !aiEnabled
+                    ? 'bg-muted text-muted-foreground/40 cursor-not-allowed'
                     : 'bg-muted text-muted-foreground hover:text-foreground',
-                ].join(' ')}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {loading && (
           <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
@@ -158,6 +159,9 @@ export function SongView() {
                       : null
                   return (
                     <div key={i}>
+                      {showChords && line.chords && (
+                        <p className="font-mono text-xs text-primary/70">{line.chords}</p>
+                      )}
                       {activeScript === 'original' || !transText ? (
                         <p className="font-serif text-base leading-relaxed">{line.text}</p>
                       ) : (

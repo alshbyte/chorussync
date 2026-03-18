@@ -9,6 +9,7 @@ export function SessionHub() {
   const store = useCommunityStore()
 
   const activeSessions = store.activeSessions
+  const myTemples = store.temples.filter(t => t.createdBy === store.userId)
   const sessionDetails = activeSessions.map((s) => ({
     ...s,
     group: store.groups.find((g) => g.id === s.groupId),
@@ -35,9 +36,9 @@ export function SessionHub() {
               size="sm"
               variant="outline"
               className="mt-4"
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(myTemples.length > 0 ? `/temple/${myTemples[0].id}` : '/dashboard')}
             >
-              Go to Dashboard
+              {myTemples.length > 0 ? 'Go to My Temple' : 'Go to Dashboard'}
             </Button>
           </div>
         ) : (

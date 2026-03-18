@@ -25,6 +25,9 @@
 
   .font-devanagari { font-family: var(--font-devanagari); }
   .font-serif { font-family: var(--font-serif); }
+  .font-telugu { font-family: "Noto Sans Telugu", sans-serif; }
+  .font-tamil { font-family: "Noto Sans Tamil", sans-serif; }
+  .font-odia { font-family: "Noto Sans Odia", sans-serif; }
 
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -43,6 +46,15 @@
   }
   .safe-bottom { padding-bottom: var(--spacing-safe-bottom); }
   .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+
+  /* Hide scrollbar for horizontal script selectors */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 
   /* Subtle background gradient for pages */
   .bg-radial-glow {

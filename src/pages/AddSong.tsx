@@ -54,6 +54,7 @@ export function AddSong() {
   const [searching, setSearching] = useState(false)
   const [formatting, setFormatting] = useState(false)
   const [aiMessage, setAiMessage] = useState('')
+  const [aiError, setAiError] = useState(false)
   const aiEnabled = isGeminiConfigured()
 
   const handleSave = () => {
@@ -66,6 +67,7 @@ export function AddSong() {
     if (!searchQuery.trim() || !aiEnabled) return
     setSearching(true)
     setAiMessage('')
+    setAiError(false)
     try {
       const result = await searchSongLyrics(searchQuery)
       if (result) {
@@ -74,11 +76,14 @@ export function AddSong() {
         setCategory(result.category)
         setDeity(result.deity)
         setAiMessage('✨ Found! Review and save.')
+        setAiError(false)
       } else {
         setAiMessage('Song not found. Try a different query or paste lyrics manually.')
+        setAiError(true)
       }
     } catch (e: unknown) {
       const msg = (e as Error).message;
+      setAiError(true)
       setAiMessage(
         msg === 'RATE_LIMIT'
           ? '⏳ Rate limit reached. Wait a minute and try again.'
@@ -92,16 +97,20 @@ export function AddSong() {
     if (!lyrics.trim() || !aiEnabled) return
     setFormatting(true)
     setAiMessage('')
+    setAiError(false)
     try {
       const result = await formatLyrics(lyrics)
       if (result) {
         setLyrics(result.formatted)
         setAiMessage(`✨ Formatted into ${result.stanzaLabels.length} stanzas: ${result.stanzaLabels.join(', ')}`)
+        setAiError(false)
       } else {
         setAiMessage('Formatting failed. Please format manually.')
+        setAiError(true)
       }
     } catch (e: unknown) {
       const msg = (e as Error).message;
+      setAiError(true)
       setAiMessage(
         msg === 'RATE_LIMIT'
           ? '⏳ Rate limit reached. Wait a minute and try again.'
@@ -152,7 +161,7 @@ export function AddSong() {
         )}
 
         {aiMessage && (
-          <p className="text-sm text-muted-foreground">{aiMessage}</p>
+          <p className={`text-sm ${aiError ? 'text-destructive' : 'text-primary'}`}>{aiMessage}</p>
         )}
 
         <div className="space-y-4">
