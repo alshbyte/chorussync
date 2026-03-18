@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
-import { ArrowLeft, Copy, Check, Play, Music, Radio, LogOut } from 'lucide-react'
+import { ArrowLeft, Copy, Check, Play, Music, Radio, LogOut, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -23,6 +23,7 @@ export function GroupDetail() {
   const members = store.memberships.filter((m) => m.groupId === groupId)
   const songs = store.songs.filter((s) => s.templeId === group.templeId)
   const session = store.activeSessions.find((s) => s.groupId === groupId)
+  const activeSong = session ? store.songs.find((s) => s.id === session.songId) : null
   const history = store.sessionHistory.filter((h) => h.groupId === groupId).slice(-5).reverse()
   const isLeader = members.some(
     (m) => m.userId === store.userId && (m.role === 'leader' || m.role === 'admin'),
@@ -38,6 +39,11 @@ export function GroupDetail() {
     store.startSession(groupId!, songId)
     setSongPickerOpen(false)
     navigate(`/session/${groupId}`)
+  }
+
+  const handleEndSession = () => {
+    if (!groupId) return
+    store.endSession(groupId)
   }
 
   return (
@@ -70,24 +76,38 @@ export function GroupDetail() {
           <QRCodeDisplay code={group.inviteCode} label={group.name} />
         </div>
 
-        {/* Active Session Banner */}
+        {/* Active Session Banner — with End option for leaders */}
         {session && (
-          <button
-            onClick={() => navigate(`/session/${groupId}`)}
-            className="w-full flex items-center gap-3 rounded-xl bg-primary/10 border border-primary/20 p-4 active:scale-[0.99] transition-all"
-          >
-            <div className="relative">
-              <Radio className="h-5 w-5 text-primary" />
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-sm font-semibold text-primary">Live Session Active</p>
-              <p className="text-xs text-muted-foreground">Tap to join</p>
-            </div>
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => navigate(`/session/${groupId}`)}
+              className="w-full flex items-center gap-3 rounded-xl bg-primary/10 border border-primary/20 p-4 active:scale-[0.99] transition-all"
+            >
+              <div className="relative">
+                <Radio className="h-5 w-5 text-primary" />
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-semibold text-primary">Live Session Active</p>
+                <p className="text-xs text-muted-foreground">
+                  {activeSong?.title || 'Song'} · Tap to join
+                </p>
+              </div>
+            </button>
+            {isLeader && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full h-9 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
+                onClick={handleEndSession}
+              >
+                <Square className="h-3 w-3" /> End Session
+              </Button>
+            )}
+          </div>
         )}
 
-        {/* Start Session */}
+        {/* Start Session — prominent call to action */}
         {!session && isLeader && (
           <>
             <Button
@@ -100,13 +120,18 @@ export function GroupDetail() {
               size="lg"
             >
               <Play className="h-4 w-4" />
-              {songs.length > 0 ? 'Start Session' : 'Add Songs First'}
+              {songs.length > 0 ? 'Start Live Session' : 'Add Songs First'}
             </Button>
+            {songs.length > 0 && (
+              <p className="text-center text-xs text-muted-foreground -mt-3">
+                Pick a song and start leading a recital
+              </p>
+            )}
 
             <Dialog open={songPickerOpen} onOpenChange={setSongPickerOpen}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Pick a Song</DialogTitle>
+                  <DialogTitle>Pick a Song to Start</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {songs.map((s) => (
@@ -128,6 +153,17 @@ export function GroupDetail() {
               </DialogContent>
             </Dialog>
           </>
+        )}
+
+        {/* Hint for non-leaders when no session */}
+        {!session && !isLeader && (
+          <div className="rounded-xl border border-dashed border-border p-6 text-center">
+            <Radio className="mx-auto h-6 w-6 text-muted-foreground/50 mb-2" />
+            <p className="text-sm text-muted-foreground">No active session</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Wait for the leader to start a session
+            </p>
+          </div>
         )}
 
         {/* Members */}

@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
-import { ArrowLeft, Plus, Users, Music, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Plus, Users, Music, Copy, Check, Play, Radio } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,17 +19,17 @@ import { QRCodeDisplay } from '@/components/common/QRCodeDisplay'
 export function TempleDetail() {
   const { templeId } = useParams<{ templeId: string }>()
   const navigate = useNavigate()
-  const { temples, groups, songs, createGroup } = useCommunityStore()
+  const store = useCommunityStore()
   const [groupName, setGroupName] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const temple = temples.find((t) => t.id === templeId)
+  const temple = store.temples.find((t) => t.id === templeId)
   if (!temple)
     return <div className="p-6 text-center text-muted-foreground">Temple not found</div>
 
-  const templeGroups = groups.filter((g) => g.templeId === templeId)
-  const templeSongs = songs.filter((s) => s.templeId === templeId)
+  const templeGroups = store.groups.filter((g) => g.templeId === templeId)
+  const templeSongs = store.songs.filter((s) => s.templeId === templeId)
 
   const handleCreateGroup = () => {
     if (!groupName.trim() || !templeId) return
@@ -37,6 +37,8 @@ export function TempleDetail() {
     setGroupName('')
     setDialogOpen(false)
   }
+
+  const { createGroup } = store
 
   const copyCode = () => {
     navigator.clipboard.writeText(temple.inviteCode)
@@ -141,27 +143,64 @@ export function TempleDetail() {
             </div>
           ) : (
             <div className="space-y-2">
-              {templeGroups.map((g) => (
-                <button
-                  key={g.id}
-                  onClick={() => navigate(`/group/${g.id}`)}
-                  className="w-full flex items-center gap-3 rounded-xl border border-border p-3.5 hover:bg-muted/50 active:scale-[0.99] transition-all text-left"
-                >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                    <Users className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{g.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{g.inviteCode}</p>
-                  </div>
-                  <Badge variant="secondary" className="text-[10px]">
-                    Leader
-                  </Badge>
-                </button>
-              ))}
+              {templeGroups.map((g) => {
+                const groupSession = store.activeSessions.find((s) => s.groupId === g.id)
+                const sessionSong = groupSession
+                  ? store.songs.find((s) => s.id === groupSession.songId)
+                  : null
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => navigate(`/group/${g.id}`)}
+                    className="w-full flex items-center gap-3 rounded-xl border border-border p-3.5 hover:bg-muted/50 active:scale-[0.99] transition-all text-left"
+                  >
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                      {groupSession ? (
+                        <Radio className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Users className="h-4 w-4 text-primary" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{g.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {groupSession ? (
+                          <span className="text-primary font-medium">
+                            🔴 Live · {sessionSong?.title || 'Session'}
+                          </span>
+                        ) : (
+                          <span className="font-mono">{g.inviteCode}</span>
+                        )}
+                      </p>
+                    </div>
+                    {groupSession ? (
+                      <Badge variant="default" className="text-[10px] animate-pulse">
+                        Live
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[10px]">
+                        Leader
+                      </Badge>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
+
+        {/* Quick Start — shown when groups exist but no sessions active */}
+        {templeGroups.length > 0 &&
+          templeSongs.length > 0 &&
+          !store.activeSessions.some((s) => templeGroups.some((g) => g.id === s.groupId)) && (
+            <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 text-center">
+              <Play className="mx-auto h-5 w-5 text-primary mb-2" />
+              <p className="text-sm font-medium">Ready to sing?</p>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">
+                Tap a group above, then "Start Live Session"
+              </p>
+            </div>
+          )}
       </motion.div>
     </div>
   )
