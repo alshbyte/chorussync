@@ -20,7 +20,7 @@ import { useUIStore } from '@/stores/ui-store'
 import { createSyncChannel, type SyncPayload } from '@/lib/sync-engine'
 import { startDrone, stopDrone, SA_KEYS } from '@/lib/audio'
 import { transliterateStanzas, isGeminiConfigured } from '@/lib/gemini'
-import type { Stanza } from '@/types/song'
+import type { Stanza, ScriptCode } from '@/types/song'
 
 const FONT_SIZE: Record<string, { normal: string; active: string }> = {
   small: { normal: 'text-sm', active: 'text-base' },
@@ -124,9 +124,25 @@ export function LiveSession() {
     if (session) setActiveIndex(session.currentStanzaIndex)
   }, [])
 
-  // Transliterate stanzas when song or preferredScript changes
+  // Local script override (follower can pick their own language during session)
+  const [sessionScript, setSessionScript] = useState<ScriptCode>(preferredScript)
+
+  // Transliterate stanzas — check persistent store first, then AI
   useEffect(() => {
-    if (!song || preferredScript === 'original' || !isGeminiConfigured()) {
+    if (!song || sessionScript === 'original') {
+      setTransliterated(null)
+      setTransError('')
+      return
+    }
+    // Already saved in song data? Use it instantly, no AI call
+    if (store.hasTransliteration(song.id, sessionScript)) {
+      setTransliterated(null) // use song data directly
+      setTransLoading(false)
+      setTransError('')
+      return
+    }
+    // Need AI
+    if (!isGeminiConfigured()) {
       setTransliterated(null)
       setTransError('')
       return
@@ -134,9 +150,13 @@ export function LiveSession() {
     let cancelled = false
     setTransLoading(true)
     setTransError('')
-    transliterateStanzas(song.stanzas, preferredScript).then((result) => {
+    transliterateStanzas(song.stanzas, sessionScript).then((result) => {
       if (!cancelled) {
-        setTransliterated(result)
+        if (result) {
+          // Save permanently so it's never needed again
+          store.saveTransliteration(song.id, sessionScript, result)
+        }
+        setTransliterated(null) // will read from store
         setTransLoading(false)
       }
     }).catch((err) => {
@@ -151,7 +171,7 @@ export function LiveSession() {
       }
     })
     return () => { cancelled = true }
-  }, [song?.id, preferredScript])
+  }, [song?.id, sessionScript])
 
   // Auto-scroll to active stanza
   useEffect(() => {
@@ -345,6 +365,38 @@ export function LiveSession() {
         </div>
       )}
 
+      {/* Script Selector — compact pill bar */}
+      <div className="border-b border-border bg-background/60 backdrop-blur-sm px-4 py-2">
+        <div className="mx-auto max-w-lg flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+          <span className="text-[10px] text-muted-foreground shrink-0 mr-1">Script:</span>
+          {(['original', 'en', 'hi', 'te', 'ta', 'od'] as const).map((code) => {
+            const labels: Record<string, string> = { original: 'Original', en: 'English', hi: 'हिन्दी', te: 'తెలుగు', ta: 'தமிழ்', od: 'ଓଡ଼ିଆ' }
+            const saved = code !== 'original' && store.hasTransliteration(song.id, code)
+            const canSelect = code === 'original' || saved || isGeminiConfigured()
+            return (
+              <button
+                key={code}
+                onClick={() => setSessionScript(code)}
+                disabled={!canSelect}
+                className={[
+                  'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors min-h-[28px] relative',
+                  sessionScript === code
+                    ? 'bg-primary text-primary-foreground'
+                    : !canSelect
+                      ? 'bg-muted/50 text-muted-foreground/30'
+                      : 'bg-muted/80 text-muted-foreground hover:text-foreground',
+                ].join(' ')}
+              >
+                {labels[code]}
+                {saved && sessionScript !== code && (
+                  <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-green-500" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Stanzas */}
       <div className="flex-1 overflow-y-auto px-4 py-6 pb-40">
         {transLoading && (
@@ -360,7 +412,8 @@ export function LiveSession() {
           </div>
         )}
         <div className="mx-auto max-w-lg space-y-3">
-          {(transliterated || song.stanzas).map((stanza, idx) => {
+          {/* Read stanzas from store (has saved transliterations) */}
+          {(store.songs.find(s => s.id === song.id)?.stanzas || song.stanzas).map((stanza, idx) => {
             const isActive = idx === activeIndex
             return (
               <div
@@ -382,8 +435,8 @@ export function LiveSession() {
                 </p>
                 <div className="space-y-1">
                   {stanza.lines.map((line, i) => {
-                    const transText = preferredScript !== 'original'
-                      ? line.transliterations[preferredScript as keyof typeof line.transliterations]
+                    const transText = sessionScript !== 'original'
+                      ? line.transliterations[sessionScript as keyof typeof line.transliterations]
                       : null
                     return (
                       <div key={i}>
@@ -392,7 +445,7 @@ export function LiveSession() {
                             {line.chords}
                           </p>
                         )}
-                        <p className={`font-serif leading-relaxed ${isActive ? sizes.active : sizes.normal}`}>
+                        <p className={`font-serif leading-relaxed text-foreground ${isActive ? sizes.active : sizes.normal}`}>
                           {transText || line.text}
                         </p>
                         {transText && (

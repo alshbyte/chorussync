@@ -1,13 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
-import { ArrowLeft, Trash2, Languages, Loader2, AlertCircle } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { ArrowLeft, Trash2, Languages, Loader2, AlertCircle, Pencil, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useCommunityStore } from '@/stores/community-store'
 import { useUIStore } from '@/stores/ui-store'
 import { transliterateStanzas, isGeminiConfigured } from '@/lib/gemini'
-import type { Stanza, ScriptCode } from '@/types/song'
+import type { ScriptCode } from '@/types/song'
 
 const SCRIPT_LABELS: Record<string, string> = {
   original: 'Original',
@@ -21,57 +21,64 @@ const SCRIPT_LABELS: Record<string, string> = {
 export function SongView() {
   const { templeId, songId } = useParams<{ templeId: string; songId: string }>()
   const navigate = useNavigate()
-  const { songs, deleteSong } = useCommunityStore()
+  const store = useCommunityStore()
   const { preferredScript, showChords } = useUIStore()
 
-  const song = songs.find((s) => s.id === songId)
-  const [transliterated, setTransliterated] = useState<Stanza[] | null>(null)
+  const song = store.songs.find((s) => s.id === songId)
   const [activeScript, setActiveScript] = useState<ScriptCode>(preferredScript)
   const [loading, setLoading] = useState(false)
   const [transError, setTransError] = useState('')
+  const [editing, setEditing] = useState(false)
   const aiEnabled = isGeminiConfigured()
 
   if (!song)
     return <div className="p-6 text-center text-muted-foreground">Song not found</div>
 
+  const hasSaved = activeScript !== 'original' && store.hasTransliteration(songId!, activeScript)
+
   const handleTransliterate = async (script: ScriptCode) => {
     setActiveScript(script)
     setTransError('')
-    if (script === 'original') {
-      setTransliterated(null)
-      return
-    }
-    // Check if we already have cached transliterations in the stanza lines
-    const allCached = song.stanzas.every((s) =>
-      s.lines.every((l) => l.transliterations[script as keyof typeof l.transliterations])
-    )
-    if (allCached) {
-      setTransliterated(song.stanzas)
-      return
-    }
+    setEditing(false)
+    if (script === 'original') return
+
+    // Already saved? No AI call needed — instant display
+    if (store.hasTransliteration(songId!, script)) return
+
+    if (!aiEnabled) return
     setLoading(true)
     try {
       const result = await transliterateStanzas(song.stanzas, script)
-      if (result) setTransliterated(result)
-      else setTransError('Transliteration returned no results')
+      if (result) {
+        // Persist into song data — never need to call AI again for this script
+        store.saveTransliteration(songId!, script, result)
+      } else {
+        setTransError('Transliteration returned no results')
+      }
     } catch (e: unknown) {
       const msg = (e as Error).message
       setTransError(
         msg === 'RATE_LIMIT'
           ? 'Rate limit reached. Try again in a minute.'
-          : 'Transliteration failed. Showing original text.'
+          : 'Transliteration failed.'
       )
     }
     setLoading(false)
   }
 
+  const handleEditLine = useCallback((stanzaIdx: number, lineIdx: number, text: string) => {
+    if (!songId) return
+    store.updateTransliterationLine(songId, activeScript, stanzaIdx, lineIdx, text)
+  }, [songId, activeScript, store])
+
   const handleDelete = () => {
     if (!confirm('Delete this song?')) return
-    deleteSong(songId!)
+    store.deleteSong(songId!)
     navigate(`/temple/${templeId}/songs`)
   }
 
-  const displayStanzas = transliterated || song.stanzas
+  // Always read fresh from store (updated by saveTransliteration / edit)
+  const currentSong = store.songs.find((s) => s.id === songId)!
 
   return (
     <div className="mx-auto max-w-lg px-4 py-4">
@@ -98,43 +105,75 @@ export function SongView() {
         </div>
 
         <div>
-          <h1 className="text-xl font-semibold">{song.title}</h1>
+          <h1 className="text-xl font-bold text-foreground">{currentSong.title}</h1>
           <div className="mt-2 flex gap-2">
             <Badge variant="secondary" className="text-[10px] capitalize">
-              {song.category}
+              {currentSong.category}
             </Badge>
             <Badge variant="outline" className="text-[10px] capitalize">
-              {song.deity}
+              {currentSong.deity}
             </Badge>
           </div>
         </div>
 
-        {/* Script Selector — always show, AI triggers transliteration on non-original */}
+        {/* Script Selector */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
           <Languages className="h-4 w-4 text-muted-foreground shrink-0" />
-          {Object.entries(SCRIPT_LABELS).map(([code, label]) => (
-            <button
-              key={code}
-              onClick={() => handleTransliterate(code as ScriptCode)}
-              disabled={code !== 'original' && !aiEnabled}
-              className={[
-                'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[32px]',
-                activeScript === code
-                  ? 'bg-primary text-primary-foreground'
-                  : code !== 'original' && !aiEnabled
-                    ? 'bg-muted text-muted-foreground/40 cursor-not-allowed'
-                    : 'bg-muted text-muted-foreground hover:text-foreground',
-              ].join(' ')}
-            >
-              {label}
-            </button>
-          ))}
+          {Object.entries(SCRIPT_LABELS).map(([code, label]) => {
+            const saved = code !== 'original' && store.hasTransliteration(songId!, code)
+            const canSelect = code === 'original' || saved || aiEnabled
+            return (
+              <button
+                key={code}
+                onClick={() => handleTransliterate(code as ScriptCode)}
+                disabled={!canSelect}
+                className={[
+                  'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[32px] relative',
+                  activeScript === code
+                    ? 'bg-primary text-primary-foreground'
+                    : !canSelect
+                      ? 'bg-muted text-muted-foreground/40 cursor-not-allowed'
+                      : 'bg-muted text-muted-foreground hover:text-foreground',
+                ].join(' ')}
+              >
+                {label}
+                {saved && activeScript !== code && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-green-500" title="Saved" />
+                )}
+              </button>
+            )
+          })}
         </div>
+
+        {/* Edit / Status bar */}
+        {hasSaved && (
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              {editing
+                ? '✏️ Editing — changes save automatically'
+                : `✅ Saved · ${SCRIPT_LABELS[activeScript]}`}
+            </p>
+            <Button
+              variant={editing ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 text-xs gap-1.5 rounded-lg"
+              onClick={() => setEditing(!editing)}
+            >
+              {editing ? <><Check className="h-3 w-3" /> Done</> : <><Pencil className="h-3 w-3" /> Edit</>}
+            </Button>
+          </div>
+        )}
+
+        {activeScript !== 'original' && !hasSaved && !loading && !transError && aiEnabled && (
+          <p className="text-xs text-muted-foreground text-center py-2">
+            🤖 AI will transliterate once · then it's saved forever
+          </p>
+        )}
 
         {loading && (
           <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Transliterating…
+            Transliterating… (one-time, saving permanently)
           </div>
         )}
 
@@ -145,13 +184,14 @@ export function SongView() {
           </div>
         )}
 
+        {/* Stanzas */}
         <div className="space-y-4">
-          {displayStanzas.map((stanza) => (
+          {currentSong.stanzas.map((stanza) => (
             <div key={stanza.index} className="rounded-xl border border-border p-4">
               <p className="text-xs font-medium text-primary uppercase tracking-wider mb-2">
                 {stanza.label}
               </p>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {stanza.lines.map((line, i) => {
                   const transText =
                     activeScript !== 'original'
@@ -163,10 +203,20 @@ export function SongView() {
                         <p className="font-mono text-xs text-primary/70">{line.chords}</p>
                       )}
                       {activeScript === 'original' || !transText ? (
-                        <p className="font-serif text-base leading-relaxed">{line.text}</p>
+                        <p className="font-serif text-base leading-relaxed text-foreground">{line.text}</p>
+                      ) : editing ? (
+                        <div className="space-y-0.5">
+                          <input
+                            type="text"
+                            value={transText}
+                            onChange={(e) => handleEditLine(stanza.index, i, e.target.value)}
+                            className="w-full font-serif text-base leading-relaxed bg-primary/5 border border-primary/20 rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+                          />
+                          <p className="text-[10px] text-muted-foreground leading-relaxed pl-2.5">{line.text}</p>
+                        </div>
                       ) : (
                         <>
-                          <p className="font-serif text-base leading-relaxed">{transText}</p>
+                          <p className="font-serif text-base leading-relaxed text-foreground">{transText}</p>
                           <p className="text-xs text-muted-foreground leading-relaxed">{line.text}</p>
                         </>
                       )}

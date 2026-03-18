@@ -48,6 +48,9 @@ interface CommunityState {
   ) => Song
   deleteSong: (id: string) => void
   leaveGroup: (groupId: string) => void
+  saveTransliteration: (songId: string, script: string, stanzas: Stanza[]) => void
+  updateTransliterationLine: (songId: string, script: string, stanzaIndex: number, lineIndex: number, text: string) => void
+  hasTransliteration: (songId: string, script: string) => boolean
   startSession: (groupId: string, songId: string) => ActiveSession
   endSession: (groupId: string) => void
   setSessionStanza: (groupId: string, index: number) => void
@@ -167,6 +170,70 @@ export const useCommunityStore = create<CommunityState>()(
             (m) => !(m.groupId === groupId && m.userId === s.userId),
           ),
         })),
+
+      saveTransliteration: (songId, script, transliteratedStanzas) =>
+        set((s) => ({
+          songs: s.songs.map((song) => {
+            if (song.id !== songId) return song
+            return {
+              ...song,
+              updatedAt: new Date().toISOString(),
+              stanzas: song.stanzas.map((stanza) => {
+                const matched = transliteratedStanzas.find((t) => t.index === stanza.index)
+                if (!matched) return stanza
+                return {
+                  ...stanza,
+                  lines: stanza.lines.map((line, i) => {
+                    const transText = matched.lines[i]?.transliterations[script as keyof typeof line.transliterations]
+                    if (!transText) return line
+                    return {
+                      ...line,
+                      transliterations: {
+                        ...line.transliterations,
+                        [script]: transText,
+                      },
+                    }
+                  }),
+                }
+              }),
+            }
+          }),
+        })),
+
+      updateTransliterationLine: (songId, script, stanzaIndex, lineIndex, text) =>
+        set((s) => ({
+          songs: s.songs.map((song) => {
+            if (song.id !== songId) return song
+            return {
+              ...song,
+              updatedAt: new Date().toISOString(),
+              stanzas: song.stanzas.map((stanza) => {
+                if (stanza.index !== stanzaIndex) return stanza
+                return {
+                  ...stanza,
+                  lines: stanza.lines.map((line, i) => {
+                    if (i !== lineIndex) return line
+                    return {
+                      ...line,
+                      transliterations: {
+                        ...line.transliterations,
+                        [script]: text,
+                      },
+                    }
+                  }),
+                }
+              }),
+            }
+          }),
+        })),
+
+      hasTransliteration: (songId, script) => {
+        const song = get().songs.find((s) => s.id === songId)
+        if (!song) return false
+        return song.stanzas.every((s) =>
+          s.lines.every((l) => l.transliterations[script as keyof typeof l.transliterations])
+        )
+      },
 
       startSession: (groupId, songId) => {
         const sess: ActiveSession = {
