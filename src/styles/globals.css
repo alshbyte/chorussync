@@ -42,6 +42,7 @@
     border-color: hsl(24 95% 48%);
   }
   .safe-bottom { padding-bottom: var(--spacing-safe-bottom); }
+  .safe-top { padding-top: env(safe-area-inset-top, 0px); }
 
   /* Subtle background gradient for pages */
   .bg-radial-glow {

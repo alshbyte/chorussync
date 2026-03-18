@@ -47,6 +47,7 @@ interface CommunityState {
     rawLyrics: string,
   ) => Song
   deleteSong: (id: string) => void
+  leaveGroup: (groupId: string) => void
   startSession: (groupId: string, songId: string) => ActiveSession
   endSession: (groupId: string) => void
   setSessionStanza: (groupId: string, index: number) => void
@@ -159,6 +160,13 @@ export const useCommunityStore = create<CommunityState>()(
       },
 
       deleteSong: (id) => set((s) => ({ songs: s.songs.filter((x) => x.id !== id) })),
+
+      leaveGroup: (groupId) =>
+        set((s) => ({
+          memberships: s.memberships.filter(
+            (m) => !(m.groupId === groupId && m.userId === s.userId),
+          ),
+        })),
 
       startSession: (groupId, songId) => {
         const sess: ActiveSession = {

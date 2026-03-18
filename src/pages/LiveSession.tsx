@@ -11,6 +11,7 @@ import {
   SkipForward,
   Music,
   Loader2,
+  AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -41,6 +42,9 @@ export function LiveSession() {
   const [songPickerOpen, setSongPickerOpen] = useState(false)
   const [transliterated, setTransliterated] = useState<Stanza[] | null>(null)
   const [transLoading, setTransLoading] = useState(false)
+  const [transError, setTransError] = useState('')
+  const [toast, setToast] = useState('')
+  const [handRaised, setHandRaised] = useState(false)
 
   const session = store.activeSessions.find((s) => s.groupId === groupId)
   const song = session ? store.songs.find((s) => s.id === session.songId) : null
@@ -48,6 +52,12 @@ export function LiveSession() {
   const isLeader = session?.leaderId === store.userId
   const templeSongs = store.songs.filter((s) => s.templeId === group?.templeId)
   const sizes = FONT_SIZE[fontSize] || FONT_SIZE.medium
+
+  // Show toast briefly
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(''), 2500)
+  }, [])
 
   // Haptic vibration on stanza change
   useEffect(() => {
@@ -63,36 +73,41 @@ export function LiveSession() {
     syncRef.current = channel
 
     channel.onMessage((msg: SyncPayload) => {
-      if (msg.senderId === store.userId) return
-      if (msg.type === 'stanza_change' && msg.stanzaIndex !== undefined) {
-        setActiveIndex(msg.stanzaIndex)
-        store.setSessionStanza(groupId, msg.stanzaIndex)
-      }
-      if (msg.type === 'song_change' && msg.songId) {
-        store.setSessionSong(groupId, msg.songId)
-        setActiveIndex(0)
-      }
-      if (msg.type === 'session_end') {
-        navigate(`/group/${groupId}`)
-      }
-      if (msg.type === 'raise_hand' && msg.senderName) {
-        setRaisedHands((prev) => [...prev, { name: msg.senderName!, time: Date.now() }])
-        setTimeout(() => {
-          setRaisedHands((prev) => prev.filter((h) => Date.now() - h.time < 5000))
-        }, 5000)
-      }
-      if (msg.type === 'request_state' && isLeader && session) {
-        channel.broadcast({
-          type: 'state_response',
-          stanzaIndex: store.activeSessions.find((s) => s.groupId === groupId)
-            ?.currentStanzaIndex,
-          songId: session.songId,
-          senderId: store.userId,
-          timestamp: Date.now(),
-        })
-      }
-      if (msg.type === 'state_response' && msg.stanzaIndex !== undefined) {
-        setActiveIndex(msg.stanzaIndex)
+      try {
+        if (msg.senderId === store.userId) return
+        if (msg.type === 'stanza_change' && msg.stanzaIndex !== undefined) {
+          setActiveIndex(msg.stanzaIndex)
+          store.setSessionStanza(groupId, msg.stanzaIndex)
+        }
+        if (msg.type === 'song_change' && msg.songId) {
+          store.setSessionSong(groupId, msg.songId)
+          setActiveIndex(0)
+          setTransliterated(null)
+        }
+        if (msg.type === 'session_end') {
+          navigate(`/group/${groupId}`)
+        }
+        if (msg.type === 'raise_hand' && msg.senderName) {
+          setRaisedHands((prev) => [...prev, { name: msg.senderName!, time: Date.now() }])
+          setTimeout(() => {
+            setRaisedHands((prev) => prev.filter((h) => Date.now() - h.time < 5000))
+          }, 5000)
+        }
+        if (msg.type === 'request_state' && isLeader && session) {
+          channel.broadcast({
+            type: 'state_response',
+            stanzaIndex: store.activeSessions.find((s) => s.groupId === groupId)
+              ?.currentStanzaIndex,
+            songId: session.songId,
+            senderId: store.userId,
+            timestamp: Date.now(),
+          })
+        }
+        if (msg.type === 'state_response' && msg.stanzaIndex !== undefined) {
+          setActiveIndex(msg.stanzaIndex)
+        }
+      } catch (err) {
+        console.error('Sync message handler error:', err)
       }
     })
 
@@ -112,17 +127,27 @@ export function LiveSession() {
   useEffect(() => {
     if (!song || preferredScript === 'original' || !isGeminiConfigured()) {
       setTransliterated(null)
+      setTransError('')
       return
     }
     let cancelled = false
     setTransLoading(true)
+    setTransError('')
     transliterateStanzas(song.stanzas, preferredScript).then((result) => {
       if (!cancelled) {
         setTransliterated(result)
         setTransLoading(false)
       }
-    }).catch(() => {
-      if (!cancelled) setTransLoading(false)
+    }).catch((err) => {
+      if (!cancelled) {
+        setTransLoading(false)
+        const msg = (err as Error).message
+        setTransError(
+          msg === 'RATE_LIMIT'
+            ? 'Rate limit reached. Showing original text.'
+            : 'Transliteration failed. Showing original text.'
+        )
+      }
     })
     return () => { cancelled = true }
   }, [song?.id, preferredScript])
@@ -151,9 +176,12 @@ export function LiveSession() {
   )
 
   const changeSong = (songId: string) => {
-    if (!groupId) return
+    if (!groupId || !isLeader) return
+    const newSong = store.songs.find(s => s.id === songId)
     store.setSessionSong(groupId, songId)
     setActiveIndex(0)
+    setTransliterated(null)
+    setTransError('')
     store.setSessionStanza(groupId, 0)
     setSongPickerOpen(false)
     syncRef.current?.broadcast({
@@ -163,6 +191,7 @@ export function LiveSession() {
       senderId: store.userId,
       timestamp: Date.now(),
     })
+    if (newSong) showToast(`🎵 Now singing: ${newSong.title}`)
   }
 
   const handleEnd = () => {
@@ -171,11 +200,15 @@ export function LiveSession() {
       stopDrone()
       setDroneOn(false)
     }
-    syncRef.current?.broadcast({
-      type: 'session_end',
-      senderId: store.userId,
-      timestamp: Date.now(),
-    })
+    try {
+      syncRef.current?.broadcast({
+        type: 'session_end',
+        senderId: store.userId,
+        timestamp: Date.now(),
+      })
+    } catch (err) {
+      console.error('Failed to broadcast end:', err)
+    }
     store.endSession(groupId)
     navigate(`/group/${groupId}`)
   }
@@ -188,6 +221,8 @@ export function LiveSession() {
       senderName: store.userName,
       timestamp: Date.now(),
     })
+    setHandRaised(true)
+    setTimeout(() => setHandRaised(false), 2000)
     if (hapticFeedback && navigator.vibrate) navigator.vibrate([50, 50, 50])
   }
 
@@ -263,7 +298,7 @@ export function LiveSession() {
           </button>
           <div className="text-center flex-1 min-w-0 px-2">
             <p className="text-sm font-semibold truncate">{song.title}</p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground truncate">
               {group?.name} · {isLeader ? 'Leading' : 'Following'}
             </p>
           </div>
@@ -282,12 +317,25 @@ export function LiveSession() {
         </div>
       </div>
 
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-30 rounded-xl bg-card border border-border px-4 py-2.5 text-sm shadow-xl animate-in slide-in-from-top duration-200">
+          {toast}
+        </div>
+      )}
+
       {/* Stanzas */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 pb-36">
+      <div className="flex-1 overflow-y-auto px-4 py-6 pb-40">
         {transLoading && (
           <div className="mx-auto max-w-lg flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground mb-3">
             <Loader2 className="h-3 w-3 animate-spin" />
             Transliterating…
+          </div>
+        )}
+        {transError && (
+          <div className="mx-auto max-w-lg flex items-center gap-2 py-2 px-3 text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-lg mb-3">
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            {transError}
           </div>
         )}
         <div className="mx-auto max-w-lg space-y-3">
@@ -299,7 +347,7 @@ export function LiveSession() {
                 id={`stanza-${idx}`}
                 onClick={() => isLeader && changeStanza(idx)}
                 className={[
-                  'rounded-xl border p-4 transition-all duration-300',
+                  'rounded-xl border p-5 transition-all duration-300',
                   isActive
                     ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10 scale-[1.01]'
                     : 'border-border opacity-40',
@@ -386,14 +434,15 @@ export function LiveSession() {
               </div>
             </div>
           ) : (
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-2">
               <Button
                 variant="outline"
                 size="lg"
-                className="gap-2 h-12 px-8 text-base"
+                className={`gap-2 h-12 px-8 text-base transition-all ${handRaised ? 'border-primary text-primary bg-primary/10' : ''}`}
                 onClick={raiseHand}
+                disabled={handRaised}
               >
-                🙏 Raise Hand
+                {handRaised ? '✓ Hand raised!' : '🙏 Raise Hand'}
               </Button>
             </div>
           )}

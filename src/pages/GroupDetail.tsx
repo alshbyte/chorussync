@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
-import { ArrowLeft, Copy, Check, Play, Music, Radio } from 'lucide-react'
+import { ArrowLeft, Copy, Check, Play, Music, Radio, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -178,6 +178,22 @@ export function GroupDetail() {
               })}
             </div>
           </div>
+        )}
+
+        {/* Leave Group */}
+        {!isLeader && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 gap-2"
+            onClick={() => {
+              if (!confirm('Leave this group?')) return
+              store.leaveGroup(groupId!)
+              navigate(`/dashboard`)
+            }}
+          >
+            <LogOut className="h-4 w-4" /> Leave Group
+          </Button>
         )}
       </motion.div>
     </div>

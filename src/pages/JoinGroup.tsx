@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Music, Users, ArrowRight, AlertCircle } from 'lucide-react'
+import { Music, Users, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,21 +19,30 @@ export function JoinGroup() {
   } | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [joined, setJoined] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!code) return
+    if (!code) {
+      setLoading(false)
+      setNotFound(true)
+      return
+    }
+    setLoading(true)
     const upper = code.toUpperCase()
     const temple = store.temples.find((t) => t.inviteCode === upper)
     if (temple) {
       setResult({ type: 'temple', id: temple.id, templeId: temple.id })
+      setLoading(false)
       return
     }
     const group = store.groups.find((g) => g.inviteCode === upper)
     if (group) {
       setResult({ type: 'group', id: group.id, templeId: group.templeId })
+      setLoading(false)
       return
     }
     setNotFound(true)
+    setLoading(false)
   }, [code])
 
   const handleJoin = () => {
@@ -49,6 +58,9 @@ export function JoinGroup() {
           navigate(`/temple/${r.id}`)
         }
       }, 600)
+    } else {
+      setNotFound(true)
+      setResult(null)
     }
   }
 
@@ -75,7 +87,14 @@ export function JoinGroup() {
           </p>
         </div>
 
-        {notFound && (
+        {loading && (
+          <div className="flex items-center justify-center gap-2 py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">Looking up code…</span>
+          </div>
+        )}
+
+        {!loading && notFound && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3 text-left">
             <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <div>

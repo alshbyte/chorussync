@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
-import { ArrowLeft, Trash2, Languages, Loader2 } from 'lucide-react'
+import { ArrowLeft, Trash2, Languages, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useCommunityStore } from '@/stores/community-store'
@@ -28,6 +28,7 @@ export function SongView() {
   const [transliterated, setTransliterated] = useState<Stanza[] | null>(null)
   const [activeScript, setActiveScript] = useState<ScriptCode>(preferredScript)
   const [loading, setLoading] = useState(false)
+  const [transError, setTransError] = useState('')
   const aiEnabled = isGeminiConfigured()
 
   if (!song)
@@ -35,6 +36,7 @@ export function SongView() {
 
   const handleTransliterate = async (script: ScriptCode) => {
     setActiveScript(script)
+    setTransError('')
     if (script === 'original') {
       setTransliterated(null)
       return
@@ -51,8 +53,14 @@ export function SongView() {
     try {
       const result = await transliterateStanzas(song.stanzas, script)
       if (result) setTransliterated(result)
-    } catch {
-      // silently fail
+      else setTransError('Transliteration returned no results')
+    } catch (e: unknown) {
+      const msg = (e as Error).message
+      setTransError(
+        msg === 'RATE_LIMIT'
+          ? 'Rate limit reached. Try again in a minute.'
+          : 'Transliteration failed. Showing original text.'
+      )
     }
     setLoading(false)
   }
@@ -126,6 +134,13 @@ export function SongView() {
           <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Transliterating…
+          </div>
+        )}
+
+        {transError && (
+          <div className="flex items-center gap-2 py-2 px-3 text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-lg">
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            {transError}
           </div>
         )}
 

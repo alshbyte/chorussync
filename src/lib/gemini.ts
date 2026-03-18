@@ -2,19 +2,17 @@ import { GoogleGenAI } from '@google/genai';
 import type { ScriptCode, SongCategory, Deity, Stanza } from '@/types/song';
 
 // ── Provider Configuration ──────────────────────────────────────────
-const groqKey = import.meta.env.VITE_GROQ_API_KEY as string;
 const geminiKey = import.meta.env.VITE_GEMINI_API_KEY as string;
 
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMMA_MODEL = 'gemma-3-27b-it';
+const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash';
 
 const genai = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : null;
 
-const hasGroq = !!groqKey;
 const hasGemini = !!geminiKey;
 
-if (!hasGroq && !hasGemini) {
-  console.warn('No AI provider configured. Set VITE_GROQ_API_KEY or VITE_GEMINI_API_KEY in .env.local');
+if (!hasGemini) {
+  console.warn('No AI provider configured. Set VITE_GEMINI_API_KEY in .env.local');
 }
 
 // ── Transliteration Cache (localStorage) ────────────────────────────
@@ -48,77 +46,57 @@ function cleanResponse(text: string): string {
   return text.replace(/```json\n?|\n?```/g, '').trim();
 }
 
-async function callGroq(prompt: string): Promise<string | null> {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${groqKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 4096,
-    }),
-  });
-  if (res.status === 429) throw new Error('RATE_LIMIT');
-  if (!res.ok) throw new Error(`Groq error: ${res.status}`);
-  const data = await res.json();
-  return cleanResponse(data.choices?.[0]?.message?.content || '');
-}
-
-async function callGeminiProvider(prompt: string): Promise<string | null> {
+async function callGemmaProvider(prompt: string): Promise<string | null> {
   if (!genai) return null;
   const res = await genai.models.generateContent({
-    model: GEMINI_MODEL,
+    model: GEMMA_MODEL,
     contents: prompt,
   });
   return cleanResponse(res.text || '');
 }
 
-// ── Unified AI Call (Groq → Gemini fallback) ────────────────────────
+async function callGeminiFallback(prompt: string): Promise<string | null> {
+  if (!genai) return null;
+  const res = await genai.models.generateContent({
+    model: GEMINI_FALLBACK_MODEL,
+    contents: prompt,
+  });
+  return cleanResponse(res.text || '');
+}
+
+// ── Unified AI Call (Gemma 3 → Gemini 2.5 Flash fallback) ───────────
 async function callAI(prompt: string, retries = 1): Promise<string | null> {
-  if (!hasGroq && !hasGemini) return null;
+  if (!hasGemini) return null;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    // Try Groq first (better free tier)
-    if (hasGroq) {
-      try {
-        const result = await callGroq(prompt);
-        if (result) return result;
-      } catch (e: unknown) {
-        const msg = (e as Error).message;
-        if (msg === 'RATE_LIMIT' && hasGemini) {
-          console.warn('Groq rate limited, falling back to Gemini');
-        } else if (msg === 'RATE_LIMIT' && !hasGemini) {
-          if (attempt < retries) {
-            await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
-            continue;
-          }
-          throw new Error('RATE_LIMIT');
-        } else {
-          console.warn('Groq error, trying Gemini:', msg);
-        }
+    // Try Gemma 3 27B first (14,400 RPD free, best for Indian languages)
+    try {
+      const result = await callGemmaProvider(prompt);
+      if (result) return result;
+    } catch (e: unknown) {
+      const status = (e as { status?: number }).status;
+      const msg = (e as Error).message;
+      if (status === 429 || msg?.includes('429')) {
+        console.warn('Gemma 3 rate limited, falling back to Gemini 2.5 Flash');
+      } else {
+        console.warn('Gemma 3 error, trying Gemini fallback:', msg);
       }
     }
 
-    // Fallback to Gemini
-    if (hasGemini) {
-      try {
-        const result = await callGeminiProvider(prompt);
-        if (result) return result;
-      } catch (e: unknown) {
-        const status = (e as { status?: number }).status;
-        if (status === 429) {
-          if (attempt < retries) {
-            await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
-            continue;
-          }
-          throw new Error('RATE_LIMIT');
+    // Fallback to Gemini 2.5 Flash
+    try {
+      const result = await callGeminiFallback(prompt);
+      if (result) return result;
+    } catch (e: unknown) {
+      const status = (e as { status?: number }).status;
+      if (status === 429) {
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+          continue;
         }
-        console.error('Gemini error:', e);
+        throw new Error('RATE_LIMIT');
       }
+      console.error('Gemini fallback error:', e);
     }
   }
 
@@ -129,14 +107,13 @@ async function callAI(prompt: string, retries = 1): Promise<string | null> {
 
 /** Returns true if at least one AI provider is configured */
 export function isGeminiConfigured(): boolean {
-  return hasGroq || hasGemini;
+  return hasGemini;
 }
 
 /** Which providers are active */
 export function getActiveProviders(): string[] {
   const providers: string[] = [];
-  if (hasGroq) providers.push('Groq');
-  if (hasGemini) providers.push('Gemini');
+  if (hasGemini) providers.push('Gemma 3 27B', 'Gemini 2.5 Flash');
   return providers;
 }
 
