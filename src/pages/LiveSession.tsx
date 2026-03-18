@@ -20,7 +20,7 @@ import { useUIStore } from '@/stores/ui-store'
 import { createSyncChannel, type SyncPayload } from '@/lib/sync-engine'
 import { startDrone, stopDrone, SA_KEYS } from '@/lib/audio'
 import { transliterateStanzas, isGeminiConfigured } from '@/lib/gemini'
-import type { Stanza, ScriptCode } from '@/types/song'
+import type { ScriptCode } from '@/types/song'
 
 const FONT_SIZE: Record<string, { normal: string; active: string }> = {
   small: { normal: 'text-sm', active: 'text-base' },
@@ -41,7 +41,6 @@ export function LiveSession() {
   const [droneOn, setDroneOn] = useState(false)
   const [droneKey, setDroneKey] = useState('C')
   const [songPickerOpen, setSongPickerOpen] = useState(false)
-  const [transliterated, setTransliterated] = useState<Stanza[] | null>(null)
   const [transLoading, setTransLoading] = useState(false)
   const [transError, setTransError] = useState('')
   const [toast, setToast] = useState('')
@@ -83,7 +82,7 @@ export function LiveSession() {
         if (msg.type === 'song_change' && msg.songId) {
           store.setSessionSong(groupId, msg.songId)
           setActiveIndex(0)
-          setTransliterated(null)
+
         }
         if (msg.type === 'session_end') {
           navigate(`/group/${groupId}`)
@@ -130,20 +129,20 @@ export function LiveSession() {
   // Transliterate stanzas — check persistent store first, then AI
   useEffect(() => {
     if (!song || sessionScript === 'original') {
-      setTransliterated(null)
+
       setTransError('')
       return
     }
     // Already saved in song data? Use it instantly, no AI call
     if (store.hasTransliteration(song.id, sessionScript)) {
-      setTransliterated(null) // use song data directly
+
       setTransLoading(false)
       setTransError('')
       return
     }
     // Need AI
     if (!isGeminiConfigured()) {
-      setTransliterated(null)
+
       setTransError('')
       return
     }
@@ -156,7 +155,7 @@ export function LiveSession() {
           // Save permanently so it's never needed again
           store.saveTransliteration(song.id, sessionScript, result)
         }
-        setTransliterated(null) // will read from store
+
         setTransLoading(false)
       }
     }).catch((err) => {
@@ -201,7 +200,7 @@ export function LiveSession() {
     const newSong = store.songs.find(s => s.id === songId)
     store.setSessionSong(groupId, songId)
     setActiveIndex(0)
-    setTransliterated(null)
+
     setTransError('')
     store.setSessionStanza(groupId, 0)
     setSongPickerOpen(false)

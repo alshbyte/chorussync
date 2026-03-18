@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Temple, Group, Membership } from '@/types/temple'
-import type { Song, SongCategory, Deity } from '@/types/song'
+import type { Song, SongCategory, Deity, Stanza } from '@/types/song'
 
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const genCode = (n = 6) =>
