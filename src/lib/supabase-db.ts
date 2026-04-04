@@ -139,7 +139,18 @@ export async function dbEndSession(groupId: string): Promise<void> {
 export async function dbGetActiveSessions(): Promise<ActiveSession[]> {
   const { data, error } = await supabase.from('active_sessions').select('*')
   if (error) { console.error('dbGetActiveSessions:', error); return [] }
-  return (data || []).map(mapActiveSession)
+  if (!data) return []
+
+  // Auto-cleanup stale sessions older than 12 hours
+  const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+  const stale = data.filter(s => s.started_at && s.started_at < twelveHoursAgo)
+  if (stale.length > 0) {
+    const staleIds = stale.map(s => s.group_id)
+    await supabase.from('active_sessions').delete().in('group_id', staleIds)
+    console.log(`Auto-cleaned ${stale.length} stale session(s)`)
+  }
+
+  return data.filter(s => !s.started_at || s.started_at >= twelveHoursAgo).map(mapActiveSession)
 }
 
 export async function dbUpdateSessionStanza(groupId: string, index: number): Promise<void> {

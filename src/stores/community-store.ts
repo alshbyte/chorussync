@@ -49,7 +49,7 @@ interface CommunityState {
   updateTransliterationLine: (songId: string, script: string, stanzaIndex: number, lineIndex: number, text: string) => void
   hasTransliteration: (songId: string, script: string) => boolean
   startSession: (groupId: string, songId: string) => Promise<ActiveSession>
-  endSession: (groupId: string) => void
+  endSession: (groupId: string) => Promise<void>
   setSessionStanza: (groupId: string, index: number) => void
   setSessionSong: (groupId: string, songId: string) => void
   getActiveSession: (groupId: string) => ActiveSession | undefined
@@ -91,7 +91,11 @@ export const useCommunityStore = create<CommunityState>()(
         set({ syncing: true })
         try {
           const data = await db.dbLoadAll()
-          set({ ...data, loaded: true, syncing: false })
+          // Validate active sessions — purge orphans that reference missing groups/songs
+          const validSessions = data.activeSessions.filter(
+            (s) => data.groups.some((g) => g.id === s.groupId) && data.songs.some((song) => song.id === s.songId)
+          )
+          set({ ...data, activeSessions: validSessions, loaded: true, syncing: false })
         } catch (e) {
           console.error('Failed to load from cloud:', e)
           set({ loaded: true, syncing: false })
@@ -272,8 +276,9 @@ export const useCommunityStore = create<CommunityState>()(
         return local
       },
 
-      endSession: (groupId) => {
+      endSession: async (groupId) => {
         const session = get().activeSessions.find((x) => x.groupId === groupId)
+        // Immediately remove from local state
         if (session) {
           const record: SessionRecord = {
             id: crypto.randomUUID(), groupId, songIds: [session.songId],
@@ -286,7 +291,12 @@ export const useCommunityStore = create<CommunityState>()(
         } else {
           set((s) => ({ activeSessions: s.activeSessions.filter((x) => x.groupId !== groupId) }))
         }
-        db.dbEndSession(groupId)
+        // Await Supabase cleanup
+        try {
+          await db.dbEndSession(groupId)
+        } catch (e) {
+          console.error('Failed to end session in cloud:', e)
+        }
       },
 
       setSessionStanza: (groupId, index) => {
@@ -315,6 +325,27 @@ export const useCommunityStore = create<CommunityState>()(
         set({ activeSessions: sessions })
       },
     }),
-    { name: 'chorussync-community' },
+    {
+      name: 'chorussync-community',
+      partialize: (state) => ({
+        // Only persist user identity and content data
+        // activeSessions, loaded, syncing are always fetched fresh from cloud
+        userId: state.userId,
+        userName: state.userName,
+        temples: state.temples,
+        groups: state.groups,
+        memberships: state.memberships,
+        songs: state.songs,
+        sessionHistory: state.sessionHistory,
+      }),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...(persistedState as Partial<CommunityState>),
+        // Always start with empty sessions — cloud is the source of truth
+        activeSessions: [],
+        loaded: false,
+        syncing: false,
+      }),
+    },
   ),
 )

@@ -41,9 +41,9 @@ export function GroupDetail() {
     navigate(`/session/${groupId}`)
   }
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
     if (!groupId) return
-    store.endSession(groupId)
+    await store.endSession(groupId)
   }
 
   return (

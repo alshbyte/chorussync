@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Music, Users, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
+import { Music, Users, ArrowRight, AlertCircle, Loader2, Radio } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,7 +51,13 @@ export function JoinGroup() {
       setJoined(true)
       setTimeout(() => {
         if (r.type === 'group') {
-          navigate(`/group/${r.id}`)
+          // Check if there's an active session — go straight to it
+          const activeSession = store.activeSessions.find((s) => s.groupId === r.id)
+          if (activeSession) {
+            navigate(`/session/${r.id}`)
+          } else {
+            navigate(`/group/${r.id}`)
+          }
         } else {
           navigate(`/temple/${r.id}`)
         }
@@ -118,6 +124,13 @@ export function JoinGroup() {
                   <p className="text-xs text-muted-foreground capitalize">{result.type}</p>
                 </div>
               </div>
+              {/* Show active session indicator */}
+              {result.type === 'group' && store.activeSessions.some(s => s.groupId === result.id) && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2">
+                  <Radio className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-medium text-primary">Live session in progress — you'll join automatically!</span>
+                </div>
+              )}
             </div>
 
             <div className="text-left">

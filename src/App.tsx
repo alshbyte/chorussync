@@ -7,6 +7,7 @@ import { Landing } from '@/pages/Landing'
 import { NotFound } from '@/pages/NotFound'
 import { useCommunityStore } from '@/stores/community-store'
 import { subscribeToSessions } from '@/lib/supabase-db'
+import { Loader2 } from 'lucide-react'
 
 // Code-split heavy pages
 const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -28,6 +29,7 @@ function Fallback() {
 export function App() {
   const loadFromCloud = useCommunityStore((s) => s.loadFromCloud)
   const refreshSessions = useCommunityStore((s) => s.refreshSessions)
+  const loaded = useCommunityStore((s) => s.loaded)
 
   // Load data from Supabase on mount
   useEffect(() => {
@@ -41,6 +43,16 @@ export function App() {
     })
     return () => { channel.unsubscribe() }
   }, [refreshSessions])
+
+  // Show loading screen while initial data loads (skip for landing page)
+  if (!loaded && typeof window !== 'undefined' && window.location.pathname !== '/') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading your communities…</p>
+      </div>
+    )
+  }
 
   return (
     <TooltipProvider>

@@ -45,6 +45,9 @@ export function LiveSession() {
   const [transError, setTransError] = useState('')
   const [toast, setToast] = useState('')
   const [handRaised, setHandRaised] = useState(false)
+  const [showEndConfirm, setShowEndConfirm] = useState(false)
+  const [presenceCount, setPresenceCount] = useState(1)
+  const presenceMap = useRef<Map<string, number>>(new Map())
 
   const session = store.activeSessions.find((s) => s.groupId === groupId)
   const song = session ? store.songs.find((s) => s.id === session.songId) : null
@@ -93,6 +96,13 @@ export function LiveSession() {
             setRaisedHands((prev) => prev.filter((h) => Date.now() - h.time < 5000))
           }, 5000)
         }
+        if (msg.type === 'presence_ping' && msg.senderId) {
+          presenceMap.current.set(msg.senderId, Date.now())
+          // Count unique senders seen in last 15 seconds + self
+          const cutoff = Date.now() - 15000
+          const activeCount = Array.from(presenceMap.current.values()).filter(t => t > cutoff).length
+          setPresenceCount(activeCount + 1) // +1 for self
+        }
         if (msg.type === 'request_state' && isLeader && session) {
           channel.broadcast({
             type: 'state_response',
@@ -115,7 +125,17 @@ export function LiveSession() {
       channel.broadcast({ type: 'request_state', senderId: store.userId, timestamp: Date.now() })
     }
 
-    return () => channel.close()
+    // Broadcast presence periodically so leader can count participants
+    const presenceInterval = setInterval(() => {
+      channel.broadcast({ type: 'presence_ping', senderId: store.userId, senderName: store.userName, timestamp: Date.now() })
+    }, 5000)
+    // Send initial presence
+    channel.broadcast({ type: 'presence_ping', senderId: store.userId, senderName: store.userName, timestamp: Date.now() })
+
+    return () => {
+      clearInterval(presenceInterval)
+      channel.close()
+    }
   }, [groupId])
 
   // Sync from store on mount
@@ -214,7 +234,7 @@ export function LiveSession() {
     if (newSong) showToast(`🎵 Now singing: ${newSong.title}`)
   }
 
-  const handleEnd = () => {
+  const handleEnd = async () => {
     if (!groupId) return
     if (droneOn) {
       stopDrone()
@@ -229,7 +249,7 @@ export function LiveSession() {
     } catch (err) {
       console.error('Failed to broadcast end:', err)
     }
-    store.endSession(groupId)
+    await store.endSession(groupId)
     navigate(`/group/${groupId}`)
   }
 
@@ -349,7 +369,8 @@ export function LiveSession() {
                 {droneKey}
               </button>
             )}
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-muted-foreground">{presenceCount}</span>
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               Live
             </div>
@@ -369,7 +390,9 @@ export function LiveSession() {
         <div className="mx-auto max-w-lg flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
           <span className="text-[10px] text-muted-foreground shrink-0 mr-1">Script:</span>
           {(['original', 'en', 'hi', 'te', 'ta', 'od'] as const).map((code) => {
-            const labels: Record<string, string> = { original: 'Original', en: 'English', hi: 'हिन्दी', te: 'తెలుగు', ta: 'தமிழ்', od: 'ଓଡ଼ିଆ' }
+            const labels: Record<string, string> = { original: 'Original', en: 'English', hi: 'Hindi', te: 'Telugu', ta: 'Tamil', od: 'Odia' }
+            const nativeLabels: Record<string, string> = { hi: 'हिन्दी', te: 'తెలుగు', ta: 'தமிழ்', od: 'ଓଡ଼ିଆ' }
+            const native = nativeLabels[code]
             const saved = code !== 'original' && store.hasTransliteration(song.id, code)
             const canSelect = code === 'original' || saved || isGeminiConfigured()
             return (
@@ -387,6 +410,9 @@ export function LiveSession() {
                 ].join(' ')}
               >
                 {labels[code]}
+                {native && sessionScript === code && (
+                  <span className="ml-0.5 text-[9px] opacity-70">{native}</span>
+                )}
                 {saved && sessionScript !== code && (
                   <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-green-500" />
                 )}
@@ -505,7 +531,7 @@ export function LiveSession() {
                   variant="ghost"
                   size="sm"
                   className="h-8 text-xs text-destructive hover:text-destructive gap-1.5"
-                  onClick={handleEnd}
+                  onClick={() => setShowEndConfirm(true)}
                 >
                   <Square className="h-3 w-3" /> End
                 </Button>
@@ -556,6 +582,26 @@ export function LiveSession() {
                 No other songs available. Add more songs to your temple library.
               </p>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* End Session Confirmation */}
+      <Dialog open={showEndConfirm} onOpenChange={setShowEndConfirm}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>End Session?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will end the live session for all {presenceCount > 1 ? `${presenceCount} connected` : ''} participants.
+          </p>
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" className="flex-1" onClick={() => setShowEndConfirm(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" className="flex-1" onClick={() => { setShowEndConfirm(false); handleEnd() }}>
+              End Session
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

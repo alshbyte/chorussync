@@ -67,7 +67,7 @@ export function Landing() {
               disabled={!inviteCode.trim()}
               className="w-full h-12 text-base gap-2 font-semibold rounded-xl shadow-lg shadow-primary/20 transition-all hover:shadow-primary/30"
             >
-              Join Session
+              Join with Code
               <ArrowRight className="h-4 w-4" />
             </Button>
           </form>

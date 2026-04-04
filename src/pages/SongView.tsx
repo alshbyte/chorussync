@@ -11,11 +11,11 @@ import type { ScriptCode } from '@/types/song'
 
 const SCRIPT_LABELS: Record<string, string> = {
   original: 'Original',
-  en: 'English (Roman)',
-  hi: 'हिन्दी',
-  te: 'తెలుగు',
-  ta: 'தமிழ்',
-  od: 'ଓଡ଼ିଆ',
+  en: 'English',
+  hi: 'Hindi',
+  te: 'Telugu',
+  ta: 'Tamil',
+  od: 'Odia',
 }
 
 export function SongView() {
