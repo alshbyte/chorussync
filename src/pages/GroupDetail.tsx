@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowLeft, Copy, Check, Play, Music, Radio, LogOut, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +28,14 @@ export function GroupDetail() {
   const isLeader = members.some(
     (m) => m.userId === store.userId && (m.role === 'leader' || m.role === 'admin'),
   )
+
+  // Poll for active session changes (covers case where Realtime replication is disabled)
+  useEffect(() => {
+    const refresh = () => store.refreshSessions()
+    refresh() // Immediate refresh on mount
+    const interval = setInterval(refresh, 4000)
+    return () => clearInterval(interval)
+  }, [store.refreshSessions])
 
   const copyCode = () => {
     navigator.clipboard.writeText(group.inviteCode)

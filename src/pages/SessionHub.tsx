@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { Radio, Play, Users } from 'lucide-react'
@@ -7,6 +8,13 @@ import { useCommunityStore } from '@/stores/community-store'
 export function SessionHub() {
   const navigate = useNavigate()
   const store = useCommunityStore()
+
+  // Poll for session changes
+  useEffect(() => {
+    store.refreshSessions()
+    const interval = setInterval(() => store.refreshSessions(), 4000)
+    return () => clearInterval(interval)
+  }, [store.refreshSessions])
 
   const activeSessions = store.activeSessions
   const myTemples = store.temples.filter(t => t.createdBy === store.userId)
