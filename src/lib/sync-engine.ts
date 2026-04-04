@@ -9,6 +9,7 @@ export interface SyncPayload {
     | 'request_state'
     | 'state_response'
     | 'raise_hand'
+    | 'presence_ping'
   songId?: string
   stanzaIndex?: number
   senderId: string
@@ -20,19 +21,36 @@ export function createSyncChannel(groupId: string) {
   const channelName = `session:${groupId}`
   let supaChannel: RealtimeChannel | null = null
   let messageCallback: ((payload: SyncPayload) => void) | null = null
+  let subscribed = false
+  let pendingMessages: SyncPayload[] = []
 
-  // Create Supabase Realtime channel for cross-device sync
+  // Create Supabase Realtime channel with server acknowledgment
   supaChannel = supabase.channel(channelName, {
-    config: { broadcast: { self: false } },
+    config: { broadcast: { self: false, ack: true } },
   })
 
   return {
-    broadcast(payload: SyncPayload) {
-      supaChannel?.send({
-        type: 'broadcast',
-        event: 'sync',
-        payload,
-      })
+    async broadcast(payload: SyncPayload) {
+      if (!supaChannel) return
+
+      // Queue messages if not yet subscribed
+      if (!subscribed) {
+        pendingMessages.push(payload)
+        return
+      }
+
+      try {
+        const result = await supaChannel.send({
+          type: 'broadcast',
+          event: 'sync',
+          payload,
+        })
+        if (result !== 'ok') {
+          console.warn(`[Sync] Broadcast ${payload.type} returned: ${result}`)
+        }
+      } catch (err) {
+        console.error(`[Sync] Broadcast error for ${payload.type}:`, err)
+      }
     },
 
     onMessage(cb: (payload: SyncPayload) => void) {
@@ -43,14 +61,30 @@ export function createSyncChannel(groupId: string) {
             messageCallback(msg.payload as SyncPayload)
           }
         })
-        .subscribe((status) => {
+        .subscribe(async (status) => {
+          console.log(`[Sync] Channel ${channelName} status: ${status}`)
           if (status === 'SUBSCRIBED') {
-            console.log(`[Sync] Connected to channel ${channelName}`)
+            subscribed = true
+            // Flush any messages that were queued before subscription
+            for (const msg of pendingMessages) {
+              try {
+                await supaChannel?.send({ type: 'broadcast', event: 'sync', payload: msg })
+              } catch { /* ignore flush errors */ }
+            }
+            pendingMessages = []
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            subscribed = false
           }
         })
     },
 
+    isSubscribed() {
+      return subscribed
+    },
+
     close() {
+      subscribed = false
+      pendingMessages = []
       if (supaChannel) {
         supabase.removeChannel(supaChannel)
         supaChannel = null

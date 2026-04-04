@@ -20,6 +20,7 @@ import { useUIStore } from '@/stores/ui-store'
 import { createSyncChannel, type SyncPayload } from '@/lib/sync-engine'
 import { startDrone, stopDrone, SA_KEYS } from '@/lib/audio'
 import { transliterateStanzas, isGeminiConfigured } from '@/lib/gemini'
+import { dbGetActiveSessions } from '@/lib/supabase-db'
 import type { ScriptCode } from '@/types/song'
 
 const FONT_SIZE: Record<string, { normal: string; active: string }> = {
@@ -137,6 +138,31 @@ export function LiveSession() {
       channel.close()
     }
   }, [groupId])
+
+  // DB-polling fallback for followers: catch up if broadcast messages were missed
+  useEffect(() => {
+    if (!groupId || isLeader) return
+    const poll = async () => {
+      try {
+        const sessions = await dbGetActiveSessions()
+        const current = sessions.find(s => s.groupId === groupId)
+        if (current && current.currentStanzaIndex !== activeIndex) {
+          setActiveIndex(current.currentStanzaIndex)
+        }
+        // Handle song change from DB
+        if (current && session && current.songId !== session.songId) {
+          store.setSessionSong(groupId, current.songId)
+          setActiveIndex(current.currentStanzaIndex)
+        }
+        // Handle session ended
+        if (!current && session) {
+          navigate(`/group/${groupId}`)
+        }
+      } catch { /* ignore polling errors */ }
+    }
+    const interval = setInterval(poll, 3000)
+    return () => clearInterval(interval)
+  }, [groupId, isLeader, session?.songId])
 
   // Sync from store on mount
   useEffect(() => {
