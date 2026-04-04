@@ -48,6 +48,7 @@ export function LiveSession() {
   const [handRaised, setHandRaised] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [presenceCount, setPresenceCount] = useState(1)
+  const [syncConnected, setSyncConnected] = useState(false)
   const presenceMap = useRef<Map<string, number>>(new Map())
 
   const session = store.activeSessions.find((s) => s.groupId === groupId)
@@ -79,6 +80,7 @@ export function LiveSession() {
     channel.onMessage((msg: SyncPayload) => {
       try {
         if (msg.senderId === store.userId) return
+        console.log('[Sync] Received:', msg.type, msg.stanzaIndex ?? '')
         if (msg.type === 'stanza_change' && msg.stanzaIndex !== undefined) {
           setActiveIndex(msg.stanzaIndex)
           store.setSessionStanza(groupId, msg.stanzaIndex)
@@ -86,7 +88,6 @@ export function LiveSession() {
         if (msg.type === 'song_change' && msg.songId) {
           store.setSessionSong(groupId, msg.songId)
           setActiveIndex(0)
-
         }
         if (msg.type === 'session_end') {
           navigate(`/group/${groupId}`)
@@ -99,10 +100,9 @@ export function LiveSession() {
         }
         if (msg.type === 'presence_ping' && msg.senderId) {
           presenceMap.current.set(msg.senderId, Date.now())
-          // Count unique senders seen in last 15 seconds + self
           const cutoff = Date.now() - 15000
           const activeCount = Array.from(presenceMap.current.values()).filter(t => t > cutoff).length
-          setPresenceCount(activeCount + 1) // +1 for self
+          setPresenceCount(activeCount + 1)
         }
         if (msg.type === 'request_state' && isLeader && session) {
           channel.broadcast({
@@ -120,6 +120,9 @@ export function LiveSession() {
       } catch (err) {
         console.error('Sync message handler error:', err)
       }
+    }, (connected) => {
+      console.log('[Sync] Connection changed:', connected)
+      setSyncConnected(connected)
     })
 
     if (!isLeader) {
@@ -130,36 +133,40 @@ export function LiveSession() {
     const presenceInterval = setInterval(() => {
       channel.broadcast({ type: 'presence_ping', senderId: store.userId, senderName: store.userName, timestamp: Date.now() })
     }, 5000)
-    // Send initial presence
     channel.broadcast({ type: 'presence_ping', senderId: store.userId, senderName: store.userName, timestamp: Date.now() })
 
     return () => {
       clearInterval(presenceInterval)
       channel.close()
+      setSyncConnected(false)
     }
   }, [groupId])
 
   // DB-polling fallback for followers: catch up if broadcast messages were missed
   useEffect(() => {
     if (!groupId || isLeader) return
+    console.log('[Sync] Starting DB polling fallback for follower')
     const poll = async () => {
       try {
         const sessions = await dbGetActiveSessions()
         const current = sessions.find(s => s.groupId === groupId)
-        if (current && current.currentStanzaIndex !== activeIndex) {
+        if (current) {
+          console.log('[Sync] DB poll: stanza =', current.currentStanzaIndex)
           setActiveIndex(current.currentStanzaIndex)
-        }
-        // Handle song change from DB
-        if (current && session && current.songId !== session.songId) {
-          store.setSessionSong(groupId, current.songId)
-          setActiveIndex(current.currentStanzaIndex)
-        }
-        // Handle session ended
-        if (!current && session) {
+          // Handle song change from DB
+          if (session && current.songId !== session.songId) {
+            store.setSessionSong(groupId, current.songId)
+          }
+        } else if (session) {
+          // Session ended
           navigate(`/group/${groupId}`)
         }
-      } catch { /* ignore polling errors */ }
+      } catch (err) {
+        console.warn('[Sync] DB poll error:', err)
+      }
     }
+    // Initial poll immediately
+    poll()
     const interval = setInterval(poll, 3000)
     return () => clearInterval(interval)
   }, [groupId, isLeader, session?.songId])
@@ -231,6 +238,7 @@ export function LiveSession() {
       const clamped = Math.max(0, Math.min(idx, song.stanzas.length - 1))
       setActiveIndex(clamped)
       store.setSessionStanza(groupId, clamped)
+      console.log('[Sync] Broadcasting stanza_change:', clamped)
       syncRef.current?.broadcast({
         type: 'stanza_change',
         stanzaIndex: clamped,
@@ -397,8 +405,8 @@ export function LiveSession() {
             )}
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-muted-foreground">{presenceCount}</span>
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-              Live
+              <span className={`h-1.5 w-1.5 rounded-full ${syncConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
+              {syncConnected ? 'Live' : 'Syncing…'}
             </div>
           </div>
         </div>

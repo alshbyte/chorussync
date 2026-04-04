@@ -53,7 +53,7 @@ export function createSyncChannel(groupId: string) {
       }
     },
 
-    onMessage(cb: (payload: SyncPayload) => void) {
+    onMessage(cb: (payload: SyncPayload) => void, onStatusChange?: (connected: boolean) => void) {
       messageCallback = cb
       supaChannel
         ?.on('broadcast', { event: 'sync' }, (msg) => {
@@ -65,6 +65,7 @@ export function createSyncChannel(groupId: string) {
           console.log(`[Sync] Channel ${channelName} status: ${status}`)
           if (status === 'SUBSCRIBED') {
             subscribed = true
+            onStatusChange?.(true)
             // Flush any messages that were queued before subscription
             for (const msg of pendingMessages) {
               try {
@@ -74,6 +75,7 @@ export function createSyncChannel(groupId: string) {
             pendingMessages = []
           } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
             subscribed = false
+            onStatusChange?.(false)
           }
         })
     },
